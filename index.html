@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>AI счётчик животных для фермера (бесплатно)</title>
+
+<!-- TensorFlow.js -->
+<script>
+// We load TF.js synchronously via a small loader with fallback
+window._tfLoaded = false;
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"
+        onerror="loadTFfallback()"></script>
+<script>
+function loadTFfallback(){
+  var s=document.createElement('script');
+  s.src='https://unpkg.com/@tensorflow/tfjs@4.17.0/dist/tf.min.js';
+  document.head.appendChild(s);
+}
+</script>
+
+<!-- COCO-SSD -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"
+        onerror="loadCocoFallback()"></script>
+<script>
+function loadCocoFallback(){
+  var s=document.createElement('script');
+  s.src='https://unpkg.com/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js';
+  document.head.appendChild(s);
+}
+</script>
+
+<!-- Google Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;700;900&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet"/>
+
+<style>
+/* ─── Design tokens ─────────────────────────────────────────── */
+:root{
+  --bg:       #1a1f14;
+  --surface:  #242b1c;
+  --card:     #2d3622;
+  --border:   #3e4d2c;
+  --text:     #e8ead2;
+  --muted:    #8a9472;
+  --green:    #6dba4f;
+  --green-d:  #4a8a33;
+  --amber:    #d4900a;
+  --red:      #c0452a;
+  --sky:      #5aabcc;
+  --tab-h:    52px;
+  --radius:   14px;
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+
+body{
+  font-family:'Nunito',sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+/* grain overlay */
+body::after{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:999;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+}
+
+/* ─── Header ──────────────────────────────────────────────── */
+header{
+  background:var(--surface);
+  border-bottom:2px solid var(--border);
+  padding:20px 20px 0;
+  position:relative;
+}
+.header-inner{
+  max-width:900px;margin:0 auto;
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+}
+.logo{font-size:2.4rem;line-height:1;flex-shrink:0}
+.header-text h1{
+  font-family:'Bitter',Georgia,serif;
+  font-size:clamp(1.1rem,4vw,1.55rem);
+  font-weight:900;line-height:1.15;
+  color:var(--text);
+}
+.header-text p{
+  font-size:.82rem;color:var(--muted);margin-top:3px;
+}
+
+/* ─── Model status pill ────────────────────────────────────── */
+#model-status{
+  display:inline-flex;align-items:center;gap:7px;
+  background:var(--card);border:1px solid var(--border);
+  border-radius:50px;padding:6px 14px;font-size:.82rem;
+  margin-top:14px;
+}
+#model-status .dot{
+  width:9px;height:9px;border-radius:50%;background:var(--muted);
+  flex-shrink:0;transition:background .4s;
+}
+#model-status.loading .dot{background:var(--amber);animation:blink 1s infinite}
+#model-status.ready   .dot{background:var(--green)}
+#model-status.error   .dot{background:var(--red)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+/* ─── Tabs ─────────────────────────────────────────────────── */
+.tabs{
+  max-width:900px;margin:0 auto;
+  display:flex;gap:0;margin-top:16px;
+}
+.tab-btn{
+  flex:1;height:var(--tab-h);border:none;background:transparent;
+  color:var(--muted);font-family:'Nunito',sans-serif;font-size:1rem;font-weight:700;
+  cursor:pointer;border-bottom:3px solid transparent;
+  transition:color .2s,border-color .2s;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.active{color:var(--green);border-bottom-color:var(--green)}
+
+/* ─── Main ─────────────────────────────────────────────────── */
+main{max-width:900px;margin:0 auto;padding:24px 16px 60px}
+
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+
+/* ─── Tip banner ────────────────────────────────────────────── */
+.tip{
+  background:var(--card);border-left:4px solid var(--amber);
+  border-radius:0 var(--radius) var(--radius) 0;
+  padding:12px 16px;font-size:.88rem;line-height:1.5;color:var(--muted);
+  margin-bottom:20px;
+}
+.tip strong{color:var(--text)}
+
+/* ─── Retry button (model error) ───────────────────────────── */
+#retry-wrap{display:none;text-align:center;padding:16px 0 4px}
+#retry-wrap.visible{display:block}
+
+/* ─── Buttons ───────────────────────────────────────────────── */
+.btn{
+  display:inline-flex;align-items:center;gap:8px;
+  border:none;border-radius:50px;
+  font-family:'Nunito',sans-serif;font-size:1rem;font-weight:700;
+  cursor:pointer;transition:transform .15s,box-shadow .15s,background .2s;
+  padding:14px 28px;
+}
+.btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.35)}
+.btn:active{transform:translateY(0)}
+.btn-green{background:var(--green);color:#0e1a09}
+.btn-green:hover{background:#7ed05e}
+.btn-red  {background:var(--red);color:#fff}
+.btn-amber{background:var(--amber);color:#1a0e00}
+.btn-outline{background:transparent;border:2px solid var(--border);color:var(--text)}
+.btn-outline:hover{border-color:var(--green);color:var(--green)}
+.btn-sm{padding:9px 20px;font-size:.88rem}
+
+/* ─── Count cards ────────────────────────────────────────────── */
+.counts{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
+  margin-bottom:20px;
+}
+@media(max-width:480px){.counts{grid-template-columns:1fr}}
+.count-card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:18px 14px;text-align:center;
+  transition:border-color .3s,transform .2s;
+}
+.count-card.hit{border-color:var(--green);transform:scale(1.03)}
+.count-card .icon{font-size:2rem;margin-bottom:4px}
+.count-card .label{
+  font-family:'Bitter',serif;font-size:.82rem;color:var(--muted);font-weight:700;
+  text-transform:uppercase;letter-spacing:.05em;
+}
+.count-card .num{
+  font-family:'Bitter',serif;font-size:3rem;font-weight:900;
+  color:var(--text);line-height:1;margin-top:2px;
+}
+.count-card.hit .num{color:var(--green)}
+
+/* ─── Alert box ──────────────────────────────────────────────── */
+.alert{
+  border-radius:var(--radius);padding:14px 18px;
+  font-size:.92rem;line-height:1.5;margin-bottom:16px;
+  display:none;
+}
+.alert.visible{display:block}
+.alert-warn{background:#332800;border-left:4px solid var(--amber);color:#e8c96d}
+.alert-err {background:#2e1108;border-left:4px solid var(--red);color:#f0836a}
+.alert-ok  {background:#0d2209;border-left:4px solid var(--green);color:#8cd87a}
+
+/* ─── Canvas / video wrapper ─────────────────────────────────── */
+.media-wrap{
+  position:relative;border-radius:var(--radius);overflow:hidden;
+  background:#0d0d0d;line-height:0;
+  box-shadow:0 8px 40px rgba(0,0,0,.6);
+  margin-bottom:20px;
+}
+.media-wrap video,
+.media-wrap canvas{
+  width:100%;display:block;border-radius:var(--radius);
+}
+/* overlay canvas sits on top of video */
+.media-wrap .overlay-canvas{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  pointer-events:none;
+}
+
+/* ─── Drop zone ─────────────────────────────────────────────── */
+#drop-zone{
+  border:3px dashed var(--border);border-radius:var(--radius);
+  background:var(--card);padding:44px 20px;text-align:center;
+  cursor:pointer;transition:border-color .2s,background .2s;
+}
+#drop-zone:hover,#drop-zone.over{border-color:var(--green);background:#1e2a15}
+#drop-zone .dz-icon{font-size:3rem;margin-bottom:10px}
+#drop-zone .dz-title{
+  font-family:'Bitter',serif;font-size:1.25rem;font-weight:700;color:var(--text);
+}
+#drop-zone .dz-sub{font-size:.85rem;color:var(--muted);margin-top:4px}
+#photo-file{display:none}
+
+/* ─── Photo result canvas ────────────────────────────────────── */
+#photo-canvas{display:none;width:100%;border-radius:var(--radius)}
+
+/* ─── Spinner ────────────────────────────────────────────────── */
+.spinner-wrap{
+  display:none;flex-direction:column;align-items:center;
+  gap:12px;padding:32px 0;
+}
+.spinner-wrap.visible{display:flex}
+.spinner{
+  width:52px;height:52px;
+  border:5px solid var(--border);border-top-color:var(--green);
+  border-radius:50%;animation:spin .75s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner-label{font-family:'Bitter',serif;font-size:1rem;color:var(--muted)}
+
+/* ─── Camera controls ────────────────────────────────────────── */
+.cam-controls{
+  display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;align-items:center;
+}
+.fps-badge{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:50px;padding:6px 14px;font-size:.8rem;color:var(--muted);
+  font-weight:700;
+}
+#fps-val{color:var(--green)}
+
+/* ─── Footer ─────────────────────────────────────────────────── */
+footer{
+  text-align:center;padding:20px 16px 28px;
+  font-size:.76rem;color:var(--muted);
+  border-top:1px solid var(--border);
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ HEADER ═══════════════════════════════════════════════════ -->
+<header>
+  <div class="header-inner">
+    <div class="logo">🌾</div>
+    <div class="header-text">
+      <h1>AI счётчик животных для фермера (бесплатно)</h1>
+      <p>Работает прямо в браузере · без сервера · без регистрации</p>
+    </div>
+  </div>
+
+  <div class="header-inner" style="padding-top:10px">
+    <div id="model-status" class="loading">
+      <span class="dot"></span>
+      <span id="model-status-text">Загрузка модели ИИ…</span>
+    </div>
+  </div>
+
+  <div id="retry-wrap">
+    <button class="btn btn-amber btn-sm" onclick="initModel(true)">🔄 Повторить загрузку модели</button>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" id="tab-cam-btn" onclick="switchTab('cam')">
+      📹 Живая камера
+    </button>
+    <button class="tab-btn" id="tab-photo-btn" onclick="switchTab('photo')">
+      🖼️ Загрузить фото
+    </button>
+  </div>
+</header>
+
+<!-- ═══ MAIN ══════════════════════════════════════════════════════ -->
+<main>
+
+  <!-- ── CAMERA TAB ──────────────────────────────────────────── -->
+  <div class="tab-panel active" id="panel-cam">
+
+    <div class="tip">
+      📸 <strong>Совет:</strong> снимайте при хорошем свете. Животные должны быть видны целиком,
+      без сильного движения. Минимальный уровень уверенности ИИ — 60%.
+    </div>
+
+    <!-- Count cards -->
+    <div class="counts">
+      <div class="count-card" id="cam-card-cow">
+        <div class="icon">🐄</div>
+        <div class="label">Коровы</div>
+        <div class="num" id="cam-cnt-cow">0</div>
+      </div>
+      <div class="count-card" id="cam-card-sheep">
+        <div class="icon">🐑</div>
+        <div class="label">Овцы</div>
+        <div class="num" id="cam-cnt-sheep">0</div>
+      </div>
+      <div class="count-card" id="cam-card-horse">
+        <div class="icon">🐎</div>
+        <div class="label">Лошади</div>
+        <div class="num" id="cam-cnt-horse">0</div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="cam-controls">
+      <button class="btn btn-green" id="btn-cam-start" onclick="startCamera()">
+        ▶ Включить камеру
+      </button>
+      <button class="btn btn-red" id="btn-cam-stop" onclick="stopCamera()" style="display:none">
+        ■ Выключить камеру
+      </button>
+      <div class="fps-badge">FPS: <span id="fps-val">—</span></div>
+    </div>
+
+    <!-- Alert -->
+    <div class="alert alert-err" id="cam-err"></div>
+    <div class="alert alert-warn" id="cam-warn"></div>
+
+    <!-- Video + overlay canvas -->
+    <div class="media-wrap" id="cam-wrap" style="display:none">
+      <video id="cam-video" autoplay muted playsinline></video>
+      <canvas class="overlay-canvas" id="cam-overlay"></canvas>
+    </div>
+
+  </div><!-- /panel-cam -->
+
+  <!-- ── PHOTO TAB ───────────────────────────────────────────── -->
+  <div class="tab-panel" id="panel-photo">
+
+    <div class="tip">
+      📸 <strong>Совет:</strong> снимайте при хорошем свете. Животные должны быть видны целиком.
+      Поддерживаются JPG, PNG, WebP.
+    </div>
+
+    <!-- Count cards -->
+    <div class="counts">
+      <div class="count-card" id="ph-card-cow">
+        <div class="icon">🐄</div>
+        <div class="label">Коровы</div>
+        <div class="num" id="ph-cnt-cow">0</div>
+      </div>
+      <div class="count-card" id="ph-card-sheep">
+        <div class="icon">🐑</div>
+        <div class="label">Овцы</div>
+        <div class="num" id="ph-cnt-sheep">0</div>
+      </div>
+      <div class="count-card" id="ph-card-horse">
+        <div class="icon">🐎</div>
+        <div class="label">Лошади</div>
+        <div class="num" id="ph-cnt-horse">0</div>
+      </div>
+    </div>
+
+    <!-- Alert -->
+    <div class="alert alert-ok"   id="ph-ok"></div>
+    <div class="alert alert-warn" id="ph-warn"></div>
+    <div class="alert alert-err"  id="ph-err"></div>
+
+    <!-- Drop zone -->
+    <div id="drop-zone"
+         onclick="document.getElementById('photo-file').click()"
+         ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event)">
+      <div class="dz-icon">🖼️</div>
+      <div class="dz-title">Перетащите фото сюда</div>
+      <div class="dz-sub">или нажмите, чтобы выбрать файл</div>
+      <button class="btn btn-green" style="margin-top:16px"
+              onclick="event.stopPropagation();document.getElementById('photo-file').click()">
+        📁 Выбрать фото
+      </button>
+      <input type="file" id="photo-file" accept="image/*"/>
+    </div>
+
+    <!-- Spinner -->
+    <div class="spinner-wrap" id="ph-spinner">
+      <div class="spinner"></div>
+      <div class="spinner-label">Анализирую изображение…</div>
+    </div>
+
+    <!-- Result canvas -->
+    <div class="media-wrap" id="ph-canvas-wrap" style="display:none">
+      <canvas id="photo-canvas"></canvas>
+    </div>
+
+    <div id="ph-reset-wrap" style="display:none;text-align:center;margin-top:12px">
+      <button class="btn btn-outline" onclick="resetPhoto()">🔄 Загрузить другое фото</button>
+    </div>
+
+  </div><!-- /panel-photo -->
+
+</main>
+
+<footer>
+  Все вычисления выполняются локально на вашем устройстве · Фото не передаются в сеть<br>
+  TensorFlow.js + COCO-SSD (MobileNet v2) · Работает на GitHub Pages
+</footer>
+
+<!-- ═══ SCRIPT ════════════════════════════════════════════════════ -->
+<script>
+/* ── Constants ──────────────────────────────────────────────── */
+const ANIMALS   = ['cow','sheep','horse'];
+const LABELS    = {cow:'Коровы',sheep:'Овцы',horse:'Лошади'};
+const COLORS    = {cow:'#c0452a',sheep:'#5aabcc',horse:'#d4900a'};
+const THRESHOLD = 0.60;
+
+/* ── Model state ────────────────────────────────────────────── */
+let model      = null;
+let modelState = 'idle'; // idle | loading | ready | error
+
+const MODEL_URLS = [
+  // Primary: jsdelivr (fast, CORS-OK)
+  null, // null = use cocoSsd.load() default (loads from jsDelivr automatically)
+  // Fallback: unpkg
+  'https://unpkg.com/@tensorflow-models/coco-ssd@2.2.3'
+];
+let modelUrlIdx = 0;
+
+/* ── DOM helpers ────────────────────────────────────────────── */
+const $ = id => document.getElementById(id);
+
+function setModelStatus(state, msg){
+  modelState = state;
+  const el = $('model-status');
+  el.className = state;
+  $('model-status-text').textContent = msg;
+  $('retry-wrap').classList.toggle('visible', state === 'error');
+}
+
+/* ── Model loading with retry ───────────────────────────────── */
+async function initModel(force){
+  if(modelState === 'ready' && !force) return;
+  if(modelState === 'loading') return;
+
+  setModelStatus('loading','Загрузка модели ИИ…');
+
+  for(let attempt = 0; attempt < 3; attempt++){
+    try{
+      await waitForLibs();
+
+      const opts = {base:'mobilenet_v2'};
+      model = await cocoSsd.load(opts);
+
+      setModelStatus('ready','✅ Модель загружена и готова');
+      $('retry-wrap').classList.remove('visible');
+      return;
+    }catch(e){
+      console.warn(`Model load attempt ${attempt+1} failed:`, e);
+      if(attempt < 2){
+        await sleep(2500);
+      }
+    }
+  }
+  setModelStatus('error','❌ Не удалось загрузить модель. Проверьте интернет.');
+}
+
+function waitForLibs(){
+  return new Promise((resolve,reject)=>{
+    let tries = 0;
+    const t = setInterval(()=>{
+      tries++;
+      if(typeof cocoSsd !== 'undefined' && typeof tf !== 'undefined'){
+        clearInterval(t); resolve();
+      }
+      if(tries > 40){ clearInterval(t); reject(new Error('Libs not loaded')); }
+    }, 250);
+  });
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ── Tab switching ──────────────────────────────────────────── */
+function switchTab(name){
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  $(`panel-${name}`).classList.add('active');
+  $(`tab-${name}-btn`).classList.add('active');
+  if(name !== 'cam') stopCamera();
+}
+
+/* ════════════════════════════════════════════════════════════════
+   CAMERA TAB
+════════════════════════════════════════════════════════════════ */
+let camStream    = null;
+let camRafId     = null;
+let lastDetectMs = 0;
+let fpsFrames    = 0;
+let fpsTimer     = null;
+
+async function startCamera(){
+  if(modelState !== 'ready'){
+    showAlert('cam-err','⚠️ Дождитесь загрузки модели ИИ.'); return;
+  }
+  hideAlert('cam-err'); hideAlert('cam-warn');
+  try{
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}},
+      audio:false
+    });
+  }catch(e){
+    showAlert('cam-err',`❌ Камера недоступна: ${e.message}. Проверьте разрешения браузера.`);
+    return;
+  }
+
+  const video = $('cam-video');
+  video.srcObject = camStream;
+  await video.play();
+
+  $('cam-wrap').style.display='block';
+  $('btn-cam-start').style.display='none';
+  $('btn-cam-stop').style.display='inline-flex';
+
+  // Sync overlay canvas size to video
+  video.addEventListener('loadedmetadata',()=>{
+    syncOverlay();
+  });
+
+  // FPS counter
+  fpsFrames = 0;
+  fpsTimer = setInterval(()=>{ $('fps-val').textContent=fpsFrames; fpsFrames=0; },1000);
+
+  camLoop();
+}
+
+function syncOverlay(){
+  const v = $('cam-video');
+  const c = $('cam-overlay');
+  c.width  = v.videoWidth  || v.clientWidth;
+  c.height = v.videoHeight || v.clientHeight;
+}
+
+function stopCamera(){
+  if(camRafId){ cancelAnimationFrame(camRafId); camRafId=null; }
+  clearInterval(fpsTimer);
+  if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream=null; }
+  $('cam-wrap').style.display='none';
+  $('btn-cam-start').style.display='inline-flex';
+  $('btn-cam-stop').style.display='none';
+  $('fps-val').textContent='—';
+  setCamCounts({cow:0,sheep:0,horse:0});
+  clearOverlay();
+}
+
+async function camLoop(){
+  const video  = $('cam-video');
+  const canvas = $('cam-overlay');
+  const ctx    = canvas.getContext('2d');
+  const INTERVAL = 500; // ms between detections (~2 fps detect; draw every frame)
+
+  async function frame(ts){
+    camRafId = requestAnimationFrame(frame);
+    fpsFrames++;
+
+    // sync canvas size in case window resized
+    if(canvas.width !== video.videoWidth && video.videoWidth > 0) syncOverlay();
+
+    if(ts - lastDetectMs < INTERVAL) return;
+    if(!model || video.readyState < 2) return;
+    lastDetectMs = ts;
+
+    let preds;
+    try{ preds = await model.detect(video); }
+    catch(e){ return; }
+
+    const animals = preds.filter(p=>ANIMALS.includes(p.class) && p.score>=THRESHOLD);
+    const counts  = {cow:0,sheep:0,horse:0};
+    animals.forEach(p=>counts[p.class]++);
+
+    setCamCounts(counts);
+
+    // Draw overlay
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    const scaleX = canvas.width  / (video.videoWidth  || canvas.width);
+    const scaleY = canvas.height / (video.videoHeight || canvas.height);
+    animals.forEach(p=>drawBox(ctx,p,scaleX,scaleY,canvas));
+
+    const total = counts.cow+counts.sheep+counts.horse;
+    if(total===0) showAlert('cam-warn','Животные не обнаружены');
+    else hideAlert('cam-warn');
+  }
+  camRafId = requestAnimationFrame(frame);
+}
+
+function setCamCounts(c){
+  ANIMALS.forEach(a=>{
+    const n = c[a]||0;
+    $(`cam-cnt-${a}`).textContent = n;
+    $(`cam-card-${a}`).classList.toggle('hit', n>0);
+  });
+}
+
+function clearOverlay(){
+  const c = $('cam-overlay');
+  c.getContext('2d').clearRect(0,0,c.width,c.height);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   PHOTO TAB
+════════════════════════════════════════════════════════════════ */
+function dzOver(e){ e.preventDefault(); $('drop-zone').classList.add('over'); }
+function dzLeave(e){ $('drop-zone').classList.remove('over'); }
+function dzDrop(e){
+  e.preventDefault(); $('drop-zone').classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if(f && f.type.startsWith('image/')) processPhoto(f);
+}
+$('photo-file').addEventListener('change',()=>{
+  if($('photo-file').files[0]) processPhoto($('photo-file').files[0]);
+});
+
+async function processPhoto(file){
+  if(modelState!=='ready'){
+    showAlert('ph-err','⚠️ Дождитесь загрузки модели ИИ.'); return;
+  }
+  hideAlert('ph-ok'); hideAlert('ph-warn'); hideAlert('ph-err');
+
+  $('drop-zone').style.display='none';
+  $('ph-spinner').classList.add('visible');
+  $('ph-canvas-wrap').style.display='none';
+  $('ph-reset-wrap').style.display='none';
+  setPhotoCounts({cow:0,sheep:0,horse:0});
+
+  const img = new Image();
+  img.onload = async ()=>{
+    const canvas = $('photo-canvas');
+    canvas.width  = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img,0,0);
+
+    let preds;
+    try{ preds = await model.detect(canvas); }
+    catch(e){
+      $('ph-spinner').classList.remove('visible');
+      showAlert('ph-err','❌ Ошибка при анализе. Попробуйте другое фото.');
+      $('ph-reset-wrap').style.display='block';
+      return;
+    }
+
+    const animals = preds.filter(p=>ANIMALS.includes(p.class) && p.score>=THRESHOLD);
+    const counts  = {cow:0,sheep:0,horse:0};
+    animals.forEach(p=>counts[p.class]++);
+    animals.forEach(p=>drawBox(ctx,p,1,1,canvas));
+
+    setPhotoCounts(counts);
+
+    const total = counts.cow+counts.sheep+counts.horse;
+    if(total===0){
+      showAlert('ph-warn','⚠️ Животные не обнаружены. Попробуйте фото при лучшем освещении или снятое ближе.');
+    }else{
+      const parts=[];
+      if(counts.cow)   parts.push(`коров: <b>${counts.cow}</b>`);
+      if(counts.sheep) parts.push(`овец: <b>${counts.sheep}</b>`);
+      if(counts.horse) parts.push(`лошадей: <b>${counts.horse}</b>`);
+      showAlert('ph-ok',`🎉 Найдено: ${parts.join(', ')} — итого <b>${total}</b>`);
+    }
+
+    $('ph-spinner').classList.remove('visible');
+    $('ph-canvas-wrap').style.display='block';
+    $('ph-reset-wrap').style.display='block';
+  };
+  img.onerror = ()=>{
+    $('ph-spinner').classList.remove('visible');
+    showAlert('ph-err','❌ Не удалось открыть изображение.');
+    $('ph-reset-wrap').style.display='block';
+  };
+  img.src = URL.createObjectURL(file);
+}
+
+function setPhotoCounts(c){
+  ANIMALS.forEach(a=>{
+    const n = c[a]||0;
+    $(`ph-cnt-${a}`).textContent = n;
+    $(`ph-card-${a}`).classList.toggle('hit', n>0);
+  });
+}
+
+function resetPhoto(){
+  $('drop-zone').style.display='block';
+  $('ph-canvas-wrap').style.display='none';
+  $('ph-reset-wrap').style.display='none';
+  hideAlert('ph-ok'); hideAlert('ph-warn'); hideAlert('ph-err');
+  $('photo-file').value='';
+  setPhotoCounts({cow:0,sheep:0,horse:0});
+  const c = $('photo-canvas');
+  c.getContext('2d').clearRect(0,0,c.width,c.height);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   SHARED: Draw bounding box
+════════════════════════════════════════════════════════════════ */
+function drawBox(ctx, pred, scaleX, scaleY, canvas){
+  const [x,y,w,h] = pred.bbox;
+  const sx = x*scaleX, sy = y*scaleY, sw = w*scaleX, sh = h*scaleY;
+  const color  = COLORS[pred.class]||'#fff';
+  const label  = `${LABELS[pred.class]} ${Math.round(pred.score*100)}%`;
+  const scale  = Math.max(canvas.width,canvas.height)/700;
+  const lw     = Math.max(2, Math.round(3*scale));
+  const fs     = Math.max(13, Math.round(16*scale));
+  const pad    = Math.round(5*scale);
+
+  ctx.lineWidth   = lw;
+  ctx.strokeStyle = color;
+  ctx.strokeRect(sx,sy,sw,sh);
+
+  // Corner markers
+  const cs = Math.min(sw,sh)*0.15;
+  ctx.lineWidth = lw*1.8;
+  [[sx,sy],[sx+sw,sy],[sx,sy+sh],[sx+sw,sy+sh]].forEach(([cx,cy],i)=>{
+    ctx.beginPath();
+    const dx = i%2===0?1:-1, dy = i<2?1:-1;
+    ctx.moveTo(cx+dx*cs,cy); ctx.lineTo(cx,cy); ctx.lineTo(cx,cy+dy*cs);
+    ctx.stroke();
+  });
+  ctx.lineWidth = lw;
+
+  // Label
+  ctx.font = `bold ${fs}px Nunito,sans-serif`;
+  const tw = ctx.measureText(label).width+pad*2;
+  const th = fs+pad*2;
+  ctx.fillStyle = color;
+  ctx.fillRect(sx, sy-th, tw, th);
+  ctx.fillStyle = '#fff';
+  ctx.fillText(label, sx+pad, sy-pad);
+}
+
+/* ── Alert helpers ──────────────────────────────────────────── */
+function showAlert(id,html){ const el=$(id); el.innerHTML=html; el.classList.add('visible'); }
+function hideAlert(id){ const el=$(id); el.classList.remove('visible'); }
+
+/* ── Boot ───────────────────────────────────────────────────── */
+initModel();
+</script>
+</body>
+</html>
