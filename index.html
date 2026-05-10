@@ -2,675 +2,961 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>AI счётчик животных для фермера (бесплатно)</title>
-
-<!-- TensorFlow.js -->
-<script>
-// We load TF.js synchronously via a small loader with fallback
-window._tfLoaded = false;
-</script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"
-        onerror="loadTFfallback()"></script>
-<script>
-function loadTFfallback(){
-  var s=document.createElement('script');
-  s.src='https://unpkg.com/@tensorflow/tfjs@4.17.0/dist/tf.min.js';
-  document.head.appendChild(s);
-}
-</script>
-
-<!-- COCO-SSD -->
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"
-        onerror="loadCocoFallback()"></script>
-<script>
-function loadCocoFallback(){
-  var s=document.createElement('script');
-  s.src='https://unpkg.com/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js';
-  document.head.appendChild(s);
-}
-</script>
-
-<!-- Google Fonts -->
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
+<title>AI Счётчик животных — Ферма</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;700;900&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700;900&family=Roboto:wght@400;500&display=swap" rel="stylesheet"/>
 
 <style>
-/* ─── Design tokens ─────────────────────────────────────────── */
 :root{
-  --bg:       #1a1f14;
-  --surface:  #242b1c;
-  --card:     #2d3622;
-  --border:   #3e4d2c;
-  --text:     #e8ead2;
-  --muted:    #8a9472;
-  --green:    #6dba4f;
-  --green-d:  #4a8a33;
-  --amber:    #d4900a;
-  --red:      #c0452a;
-  --sky:      #5aabcc;
-  --tab-h:    52px;
-  --radius:   14px;
+  --bg:#0f1109;
+  --surf:#181e10;
+  --card:#1e2715;
+  --border:#2e3d1e;
+  --text:#e6ead4;
+  --muted:#7a8a60;
+  --green:#5ecb3e;
+  --green2:#3a9a20;
+  --amber:#d4920c;
+  --red:#cc3d22;
+  --sky:#4aa8cc;
+  --cow:#cc4422;
+  --sheep:#4aa8cc;
+  --horse:#d4920c;
 }
-
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
-
+html,body{height:100%;overflow-x:hidden}
 body{
-  font-family:'Nunito',sans-serif;
-  background:var(--bg);
-  color:var(--text);
+  font-family:'Roboto',sans-serif;
+  background:var(--bg);color:var(--text);
   min-height:100vh;
-  overflow-x:hidden;
 }
 
-/* grain overlay */
-body::after{
-  content:'';position:fixed;inset:0;pointer-events:none;z-index:999;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+/* ── LOADING SCREEN ─────────────────────────────────────────── */
+#loading-screen{
+  position:fixed;inset:0;z-index:1000;
+  background:var(--bg);
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:32px 20px;
+  transition:opacity .5s;
 }
+#loading-screen.fade-out{opacity:0;pointer-events:none}
+.load-logo{font-size:4rem;margin-bottom:16px;animation:bob 2s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.load-title{
+  font-family:'Roboto Condensed',sans-serif;font-weight:900;
+  font-size:clamp(1.2rem,5vw,1.8rem);text-align:center;
+  color:var(--text);margin-bottom:6px;
+}
+.load-sub{font-size:.85rem;color:var(--muted);margin-bottom:32px;text-align:center}
 
-/* ─── Header ──────────────────────────────────────────────── */
-header{
-  background:var(--surface);
-  border-bottom:2px solid var(--border);
-  padding:20px 20px 0;
-  position:relative;
-}
-.header-inner{
-  max-width:900px;margin:0 auto;
-  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
-}
-.logo{font-size:2.4rem;line-height:1;flex-shrink:0}
-.header-text h1{
-  font-family:'Bitter',Georgia,serif;
-  font-size:clamp(1.1rem,4vw,1.55rem);
-  font-weight:900;line-height:1.15;
-  color:var(--text);
-}
-.header-text p{
-  font-size:.82rem;color:var(--muted);margin-top:3px;
-}
-
-/* ─── Model status pill ────────────────────────────────────── */
-#model-status{
-  display:inline-flex;align-items:center;gap:7px;
+.progress-outer{
+  width:min(360px,90vw);height:18px;
   background:var(--card);border:1px solid var(--border);
-  border-radius:50px;padding:6px 14px;font-size:.82rem;
-  margin-top:14px;
+  border-radius:50px;overflow:hidden;margin-bottom:10px;
 }
-#model-status .dot{
-  width:9px;height:9px;border-radius:50%;background:var(--muted);
-  flex-shrink:0;transition:background .4s;
+.progress-inner{
+  height:100%;border-radius:50px;
+  background:linear-gradient(90deg,var(--green2),var(--green));
+  transition:width .4s ease;
+  width:0%;
+  position:relative;overflow:hidden;
 }
-#model-status.loading .dot{background:var(--amber);animation:blink 1s infinite}
-#model-status.ready   .dot{background:var(--green)}
-#model-status.error   .dot{background:var(--red)}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.progress-inner::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.25) 50%,transparent 100%);
+  animation:shimmer 1.2s infinite;
+}
+@keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 
-/* ─── Tabs ─────────────────────────────────────────────────── */
-.tabs{
-  max-width:900px;margin:0 auto;
-  display:flex;gap:0;margin-top:16px;
+#load-pct{
+  font-family:'Roboto Condensed',sans-serif;font-weight:700;
+  font-size:1.1rem;color:var(--green);margin-bottom:8px;
 }
+#load-stage{font-size:.82rem;color:var(--muted);min-height:1.2em;text-align:center}
+#load-err{
+  display:none;margin-top:20px;text-align:center;
+  background:#2e0f08;border:1px solid var(--red);
+  border-radius:10px;padding:14px 20px;max-width:360px;
+  font-size:.88rem;line-height:1.5;color:#f08060;
+}
+#load-err.visible{display:block}
+.btn-retry{
+  display:inline-flex;align-items:center;gap:6px;
+  background:var(--red);color:#fff;border:none;
+  border-radius:50px;padding:10px 22px;font-size:.9rem;font-weight:700;
+  cursor:pointer;margin-top:12px;
+  font-family:'Roboto Condensed',sans-serif;
+}
+
+/* ── APP SHELL ──────────────────────────────────────────────── */
+#app{display:none;flex-direction:column;min-height:100vh}
+#app.visible{display:flex}
+
+header{
+  background:var(--surf);border-bottom:2px solid var(--border);
+  padding:14px 16px 0;
+}
+.hdr-top{
+  max-width:1100px;margin:0 auto;
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  margin-bottom:10px;
+}
+.hdr-logo{font-size:1.8rem}
+.hdr-title{
+  font-family:'Roboto Condensed',sans-serif;font-weight:900;
+  font-size:clamp(1rem,3.5vw,1.35rem);line-height:1.2;
+}
+.hdr-sub{font-size:.75rem;color:var(--muted);margin-top:2px}
+
+.tabs{max-width:1100px;margin:0 auto;display:flex}
 .tab-btn{
-  flex:1;height:var(--tab-h);border:none;background:transparent;
-  color:var(--muted);font-family:'Nunito',sans-serif;font-size:1rem;font-weight:700;
-  cursor:pointer;border-bottom:3px solid transparent;
-  transition:color .2s,border-color .2s;
+  flex:1;border:none;background:transparent;
+  color:var(--muted);font-family:'Roboto Condensed',sans-serif;
+  font-weight:700;font-size:1rem;
+  height:44px;cursor:pointer;
+  border-bottom:3px solid transparent;
   display:flex;align-items:center;justify-content:center;gap:6px;
+  transition:color .2s,border-color .2s;
 }
 .tab-btn:hover{color:var(--text)}
 .tab-btn.active{color:var(--green);border-bottom-color:var(--green)}
 
-/* ─── Main ─────────────────────────────────────────────────── */
-main{max-width:900px;margin:0 auto;padding:24px 16px 60px}
+main{flex:1;max-width:1100px;margin:0 auto;padding:16px 12px 48px;width:100%}
+.panel{display:none}.panel.active{display:block}
 
-.tab-panel{display:none}
-.tab-panel.active{display:block}
+/* ── CAMERA LAYOUT ──────────────────────────────────────────── */
+.cam-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px;
+  align-items:start;
+}
+@media(max-width:640px){.cam-grid{grid-template-columns:1fr}}
 
-/* ─── Tip banner ────────────────────────────────────────────── */
+/* video side */
+.cam-video-col{}
+.media-wrap{
+  position:relative;border-radius:12px;overflow:hidden;
+  background:#000;line-height:0;
+  box-shadow:0 6px 32px rgba(0,0,0,.6);
+}
+#cam-video{width:100%;display:block;border-radius:12px}
+#cam-overlay{
+  position:absolute;inset:0;width:100%;height:100%;
+  pointer-events:none;border-radius:12px;
+}
+.cam-no-signal{
+  display:none;
+  background:var(--card);border-radius:12px;
+  min-height:220px;
+  align-items:center;justify-content:center;
+  flex-direction:column;gap:10px;color:var(--muted);
+  font-size:.9rem;text-align:center;padding:20px;
+}
+.cam-no-signal.visible{display:flex}
+.cam-no-signal .ns-icon{font-size:3rem}
+
+.cam-controls{
+  display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center;
+}
+
+/* counter side */
+.cam-counter-col{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:12px;overflow:hidden;
+  position:sticky;top:12px;
+}
+.counter-header{
+  background:var(--border);padding:10px 16px;
+  font-family:'Roboto Condensed',sans-serif;font-weight:700;
+  font-size:.82rem;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--muted);display:flex;align-items:center;gap:6px;
+}
+.live-dot{
+  width:8px;height:8px;border-radius:50%;background:var(--muted);
+  flex-shrink:0;
+}
+.live-dot.active{background:var(--green);animation:pulse 1.2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+
+.counter-rows{padding:6px 0}
+.cnt-row{
+  display:flex;align-items:center;
+  padding:10px 16px;
+  border-bottom:1px solid var(--border);
+  gap:12px;
+  transition:background .2s;
+}
+.cnt-row:last-child{border-bottom:none}
+.cnt-row.hit{background:rgba(94,203,62,.06)}
+.cnt-icon{font-size:clamp(1.6rem,4vw,2.2rem);flex-shrink:0;width:44px;text-align:center}
+.cnt-label{
+  font-family:'Roboto Condensed',sans-serif;font-weight:700;
+  font-size:clamp(.85rem,2.5vw,1rem);color:var(--muted);
+  text-transform:uppercase;letter-spacing:.05em;
+  flex:1;
+}
+.cnt-num{
+  font-family:'Roboto Condensed',sans-serif;font-weight:900;
+  font-size:clamp(3rem,8vw,5.5rem);
+  line-height:1;
+  color:var(--text);
+  min-width:1.5ch;text-align:right;
+  transition:color .3s,transform .15s;
+}
+.cnt-num.flash{color:var(--green);transform:scale(1.08)}
+.cnt-row.hit .cnt-num{color:var(--green)}
+
+.counter-total{
+  background:rgba(94,203,62,.08);
+  padding:12px 16px;
+  display:flex;justify-content:space-between;align-items:center;
+  border-top:2px solid var(--border);
+}
+.total-label{
+  font-family:'Roboto Condensed',sans-serif;font-weight:700;
+  font-size:.9rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;
+}
+.total-num{
+  font-family:'Roboto Condensed',sans-serif;font-weight:900;
+  font-size:clamp(2rem,6vw,3.5rem);color:var(--green);line-height:1;
+}
+
+.fps-row{
+  padding:8px 16px;border-top:1px solid var(--border);
+  display:flex;gap:16px;font-size:.75rem;color:var(--muted);
+}
+.fps-row span{font-weight:700;color:var(--text)}
+
+/* alert strip */
+.alert-strip{
+  border-radius:8px;padding:10px 14px;font-size:.85rem;
+  line-height:1.4;margin-top:10px;display:none;
+}
+.alert-strip.visible{display:block}
+.aw{background:#2d1e00;border-left:3px solid var(--amber);color:#e8c06a}
+.ae{background:#2a0e06;border-left:3px solid var(--red);color:#f08060}
+.ao{background:#0c1f08;border-left:3px solid var(--green);color:#7ed46a}
+
+/* ── PHOTO TAB ──────────────────────────────────────────────── */
+.photo-layout{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+@media(max-width:640px){.photo-layout{grid-template-columns:1fr}}
+
+#drop-zone{
+  border:3px dashed var(--border);border-radius:12px;
+  background:var(--card);padding:40px 20px;text-align:center;
+  cursor:pointer;transition:border-color .2s,background .2s;
+}
+#drop-zone:hover,#drop-zone.over{border-color:var(--green);background:#141f0d}
+#drop-zone .dz-ico{font-size:3rem;margin-bottom:8px}
+#drop-zone .dz-t{
+  font-family:'Roboto Condensed',sans-serif;font-weight:700;
+  font-size:1.1rem;color:var(--text);
+}
+#drop-zone .dz-s{font-size:.82rem;color:var(--muted);margin-top:4px}
+#photo-file{display:none}
+
+.ph-canvas-wrap{
+  display:none;border-radius:12px;overflow:hidden;
+  background:#000;line-height:0;
+  box-shadow:0 6px 32px rgba(0,0,0,.6);
+  margin-top:10px;
+}
+#photo-canvas{width:100%;display:block;border-radius:12px}
+
+.ph-spinner{
+  display:none;flex-direction:column;align-items:center;
+  gap:12px;padding:28px 0;
+}
+.ph-spinner.visible{display:flex}
+.spinner{
+  width:48px;height:48px;
+  border:5px solid var(--border);border-top-color:var(--green);
+  border-radius:50%;animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner-lbl{
+  font-family:'Roboto Condensed',sans-serif;font-size:.95rem;color:var(--muted);
+}
+
+/* photo counter (same style, compact) */
+.ph-counter{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:12px;overflow:hidden;
+  position:sticky;top:12px;
+}
+
+/* ── BUTTONS ────────────────────────────────────────────────── */
+.btn{
+  display:inline-flex;align-items:center;gap:6px;
+  border:none;border-radius:50px;
+  font-family:'Roboto Condensed',sans-serif;font-weight:700;
+  font-size:.95rem;cursor:pointer;padding:12px 22px;
+  transition:transform .15s,box-shadow .15s,filter .2s;
+}
+.btn:hover{transform:translateY(-2px);box-shadow:0 5px 18px rgba(0,0,0,.4)}
+.btn:active{transform:translateY(0)}
+.bg{background:var(--green);color:#0a1a05}
+.bg:hover{filter:brightness(1.1)}
+.br{background:var(--red);color:#fff}
+.ba{background:var(--amber);color:#1a0a00}
+.bo{background:transparent;border:2px solid var(--border);color:var(--text)}
+.bo:hover{border-color:var(--green);color:var(--green)}
+.btn-sm{padding:8px 16px;font-size:.82rem}
+
+/* ── TIPS ───────────────────────────────────────────────────── */
 .tip{
-  background:var(--card);border-left:4px solid var(--amber);
-  border-radius:0 var(--radius) var(--radius) 0;
-  padding:12px 16px;font-size:.88rem;line-height:1.5;color:var(--muted);
-  margin-bottom:20px;
+  background:var(--card);border-left:3px solid var(--amber);
+  border-radius:0 8px 8px 0;padding:10px 14px;
+  font-size:.82rem;line-height:1.5;color:var(--muted);
+  margin-bottom:14px;
 }
 .tip strong{color:var(--text)}
 
-/* ─── Retry button (model error) ───────────────────────────── */
-#retry-wrap{display:none;text-align:center;padding:16px 0 4px}
-#retry-wrap.visible{display:block}
-
-/* ─── Buttons ───────────────────────────────────────────────── */
-.btn{
-  display:inline-flex;align-items:center;gap:8px;
-  border:none;border-radius:50px;
-  font-family:'Nunito',sans-serif;font-size:1rem;font-weight:700;
-  cursor:pointer;transition:transform .15s,box-shadow .15s,background .2s;
-  padding:14px 28px;
-}
-.btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.35)}
-.btn:active{transform:translateY(0)}
-.btn-green{background:var(--green);color:#0e1a09}
-.btn-green:hover{background:#7ed05e}
-.btn-red  {background:var(--red);color:#fff}
-.btn-amber{background:var(--amber);color:#1a0e00}
-.btn-outline{background:transparent;border:2px solid var(--border);color:var(--text)}
-.btn-outline:hover{border-color:var(--green);color:var(--green)}
-.btn-sm{padding:9px 20px;font-size:.88rem}
-
-/* ─── Count cards ────────────────────────────────────────────── */
-.counts{
-  display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
-  margin-bottom:20px;
-}
-@media(max-width:480px){.counts{grid-template-columns:1fr}}
-.count-card{
-  background:var(--card);border:1px solid var(--border);
-  border-radius:var(--radius);padding:18px 14px;text-align:center;
-  transition:border-color .3s,transform .2s;
-}
-.count-card.hit{border-color:var(--green);transform:scale(1.03)}
-.count-card .icon{font-size:2rem;margin-bottom:4px}
-.count-card .label{
-  font-family:'Bitter',serif;font-size:.82rem;color:var(--muted);font-weight:700;
-  text-transform:uppercase;letter-spacing:.05em;
-}
-.count-card .num{
-  font-family:'Bitter',serif;font-size:3rem;font-weight:900;
-  color:var(--text);line-height:1;margin-top:2px;
-}
-.count-card.hit .num{color:var(--green)}
-
-/* ─── Alert box ──────────────────────────────────────────────── */
-.alert{
-  border-radius:var(--radius);padding:14px 18px;
-  font-size:.92rem;line-height:1.5;margin-bottom:16px;
-  display:none;
-}
-.alert.visible{display:block}
-.alert-warn{background:#332800;border-left:4px solid var(--amber);color:#e8c96d}
-.alert-err {background:#2e1108;border-left:4px solid var(--red);color:#f0836a}
-.alert-ok  {background:#0d2209;border-left:4px solid var(--green);color:#8cd87a}
-
-/* ─── Canvas / video wrapper ─────────────────────────────────── */
-.media-wrap{
-  position:relative;border-radius:var(--radius);overflow:hidden;
-  background:#0d0d0d;line-height:0;
-  box-shadow:0 8px 40px rgba(0,0,0,.6);
-  margin-bottom:20px;
-}
-.media-wrap video,
-.media-wrap canvas{
-  width:100%;display:block;border-radius:var(--radius);
-}
-/* overlay canvas sits on top of video */
-.media-wrap .overlay-canvas{
-  position:absolute;inset:0;
-  width:100%;height:100%;
-  pointer-events:none;
-}
-
-/* ─── Drop zone ─────────────────────────────────────────────── */
-#drop-zone{
-  border:3px dashed var(--border);border-radius:var(--radius);
-  background:var(--card);padding:44px 20px;text-align:center;
-  cursor:pointer;transition:border-color .2s,background .2s;
-}
-#drop-zone:hover,#drop-zone.over{border-color:var(--green);background:#1e2a15}
-#drop-zone .dz-icon{font-size:3rem;margin-bottom:10px}
-#drop-zone .dz-title{
-  font-family:'Bitter',serif;font-size:1.25rem;font-weight:700;color:var(--text);
-}
-#drop-zone .dz-sub{font-size:.85rem;color:var(--muted);margin-top:4px}
-#photo-file{display:none}
-
-/* ─── Photo result canvas ────────────────────────────────────── */
-#photo-canvas{display:none;width:100%;border-radius:var(--radius)}
-
-/* ─── Spinner ────────────────────────────────────────────────── */
-.spinner-wrap{
-  display:none;flex-direction:column;align-items:center;
-  gap:12px;padding:32px 0;
-}
-.spinner-wrap.visible{display:flex}
-.spinner{
-  width:52px;height:52px;
-  border:5px solid var(--border);border-top-color:var(--green);
-  border-radius:50%;animation:spin .75s linear infinite;
-}
-@keyframes spin{to{transform:rotate(360deg)}}
-.spinner-label{font-family:'Bitter',serif;font-size:1rem;color:var(--muted)}
-
-/* ─── Camera controls ────────────────────────────────────────── */
-.cam-controls{
-  display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;align-items:center;
-}
-.fps-badge{
-  background:var(--card);border:1px solid var(--border);
-  border-radius:50px;padding:6px 14px;font-size:.8rem;color:var(--muted);
-  font-weight:700;
-}
-#fps-val{color:var(--green)}
-
-/* ─── Footer ─────────────────────────────────────────────────── */
 footer{
-  text-align:center;padding:20px 16px 28px;
-  font-size:.76rem;color:var(--muted);
+  text-align:center;padding:16px;font-size:.72rem;color:var(--muted);
   border-top:1px solid var(--border);
 }
 </style>
 </head>
 <body>
 
-<!-- ═══ HEADER ═══════════════════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════════════════════════
+     LOADING SCREEN
+═══════════════════════════════════════════════════════════ -->
+<div id="loading-screen">
+  <div class="load-logo">🌾</div>
+  <div class="load-title">AI Счётчик животных</div>
+  <div class="load-sub">Загрузка ИИ-модели — подождите…</div>
+
+  <div class="progress-outer">
+    <div class="progress-inner" id="prog-bar"></div>
+  </div>
+  <div id="load-pct">0%</div>
+  <div id="load-stage">Инициализация…</div>
+
+  <div id="load-err">
+    <div id="load-err-text">Не удалось загрузить модель.</div>
+    <br/>
+    <button class="btn-retry" onclick="retryLoad()">🔄 Повторить загрузку</button>
+    <br/><br/>
+    <div style="font-size:.78rem;color:#b06040">Проверьте интернет-соединение.<br>
+    Можно также обновить страницу (F5).</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     APP
+═══════════════════════════════════════════════════════════ -->
+<div id="app">
 <header>
-  <div class="header-inner">
-    <div class="logo">🌾</div>
-    <div class="header-text">
-      <h1>AI счётчик животных для фермера (бесплатно)</h1>
-      <p>Работает прямо в браузере · без сервера · без регистрации</p>
+  <div class="hdr-top">
+    <div class="hdr-logo">🐄</div>
+    <div>
+      <div class="hdr-title">AI Счётчик животных для фермера</div>
+      <div class="hdr-sub">Работает в браузере · без сервера · фото не покидают устройство</div>
     </div>
   </div>
-
-  <div class="header-inner" style="padding-top:10px">
-    <div id="model-status" class="loading">
-      <span class="dot"></span>
-      <span id="model-status-text">Загрузка модели ИИ…</span>
-    </div>
-  </div>
-
-  <div id="retry-wrap">
-    <button class="btn btn-amber btn-sm" onclick="initModel(true)">🔄 Повторить загрузку модели</button>
-  </div>
-
-  <!-- Tabs -->
   <div class="tabs">
-    <button class="tab-btn active" id="tab-cam-btn" onclick="switchTab('cam')">
-      📹 Живая камера
-    </button>
-    <button class="tab-btn" id="tab-photo-btn" onclick="switchTab('photo')">
-      🖼️ Загрузить фото
-    </button>
+    <button class="tab-btn active" id="tab-cam-btn" onclick="switchTab('cam')">📹 Живая камера</button>
+    <button class="tab-btn" id="tab-ph-btn"  onclick="switchTab('ph')">🖼️ Загрузить фото</button>
   </div>
 </header>
 
-<!-- ═══ MAIN ══════════════════════════════════════════════════════ -->
 <main>
 
-  <!-- ── CAMERA TAB ──────────────────────────────────────────── -->
-  <div class="tab-panel active" id="panel-cam">
+<!-- ── CAM PANEL ─────────────────────────────────────────────── -->
+<div class="panel active" id="panel-cam">
+  <div class="tip">
+    <strong>💡 Совет:</strong> снимайте при хорошем освещении, животные должны быть видны целиком.
+    Держите телефон горизонтально для лучшего охвата.
+  </div>
 
-    <div class="tip">
-      📸 <strong>Совет:</strong> снимайте при хорошем свете. Животные должны быть видны целиком,
-      без сильного движения. Минимальный уровень уверенности ИИ — 60%.
+  <div class="cam-grid">
+    <!-- LEFT: video -->
+    <div class="cam-video-col">
+      <div class="media-wrap" id="cam-wrap">
+        <video id="cam-video" autoplay muted playsinline></video>
+        <canvas id="cam-overlay"></canvas>
+      </div>
+      <div class="cam-no-signal" id="cam-nosignal">
+        <div class="ns-icon">📷</div>
+        <div>Камера не включена</div>
+        <div style="font-size:.75rem;margin-top:4px">Нажмите «Включить камеру»</div>
+      </div>
+      <div class="cam-controls">
+        <button class="btn bg" id="btn-start" onclick="startCamera()">▶ Включить камеру</button>
+        <button class="btn br" id="btn-stop"  onclick="stopCamera()" style="display:none">■ Выключить</button>
+        <button class="btn bo btn-sm" id="btn-snap" onclick="snapPhoto()" style="display:none" title="Сделать снимок">📸 Снимок</button>
+      </div>
+      <div class="alert-strip ae" id="cam-err"></div>
+      <div class="alert-strip aw" id="cam-warn"></div>
     </div>
 
-    <!-- Count cards -->
-    <div class="counts">
-      <div class="count-card" id="cam-card-cow">
-        <div class="icon">🐄</div>
-        <div class="label">Коровы</div>
-        <div class="num" id="cam-cnt-cow">0</div>
+    <!-- RIGHT: counter -->
+    <div class="cam-counter-col">
+      <div class="counter-header">
+        <div class="live-dot" id="live-dot"></div>
+        СЧЁТЧИК В РЕАЛЬНОМ ВРЕМЕНИ
       </div>
-      <div class="count-card" id="cam-card-sheep">
-        <div class="icon">🐑</div>
-        <div class="label">Овцы</div>
-        <div class="num" id="cam-cnt-sheep">0</div>
+      <div class="counter-rows">
+        <div class="cnt-row" id="cam-row-cow">
+          <div class="cnt-icon">🐄</div>
+          <div class="cnt-label">Коровы</div>
+          <div class="cnt-num" id="cam-n-cow">0</div>
+        </div>
+        <div class="cnt-row" id="cam-row-sheep">
+          <div class="cnt-icon">🐑</div>
+          <div class="cnt-label">Овцы</div>
+          <div class="cnt-num" id="cam-n-sheep">0</div>
+        </div>
+        <div class="cnt-row" id="cam-row-horse">
+          <div class="cnt-icon">🐎</div>
+          <div class="cnt-label">Лошади</div>
+          <div class="cnt-num" id="cam-n-horse">0</div>
+        </div>
       </div>
-      <div class="count-card" id="cam-card-horse">
-        <div class="icon">🐎</div>
-        <div class="label">Лошади</div>
-        <div class="num" id="cam-cnt-horse">0</div>
+      <div class="counter-total">
+        <div class="total-label">ИТОГО</div>
+        <div class="total-num" id="cam-total">0</div>
       </div>
-    </div>
-
-    <!-- Controls -->
-    <div class="cam-controls">
-      <button class="btn btn-green" id="btn-cam-start" onclick="startCamera()">
-        ▶ Включить камеру
-      </button>
-      <button class="btn btn-red" id="btn-cam-stop" onclick="stopCamera()" style="display:none">
-        ■ Выключить камеру
-      </button>
-      <div class="fps-badge">FPS: <span id="fps-val">—</span></div>
-    </div>
-
-    <!-- Alert -->
-    <div class="alert alert-err" id="cam-err"></div>
-    <div class="alert alert-warn" id="cam-warn"></div>
-
-    <!-- Video + overlay canvas -->
-    <div class="media-wrap" id="cam-wrap" style="display:none">
-      <video id="cam-video" autoplay muted playsinline></video>
-      <canvas class="overlay-canvas" id="cam-overlay"></canvas>
-    </div>
-
-  </div><!-- /panel-cam -->
-
-  <!-- ── PHOTO TAB ───────────────────────────────────────────── -->
-  <div class="tab-panel" id="panel-photo">
-
-    <div class="tip">
-      📸 <strong>Совет:</strong> снимайте при хорошем свете. Животные должны быть видны целиком.
-      Поддерживаются JPG, PNG, WebP.
-    </div>
-
-    <!-- Count cards -->
-    <div class="counts">
-      <div class="count-card" id="ph-card-cow">
-        <div class="icon">🐄</div>
-        <div class="label">Коровы</div>
-        <div class="num" id="ph-cnt-cow">0</div>
-      </div>
-      <div class="count-card" id="ph-card-sheep">
-        <div class="icon">🐑</div>
-        <div class="label">Овцы</div>
-        <div class="num" id="ph-cnt-sheep">0</div>
-      </div>
-      <div class="count-card" id="ph-card-horse">
-        <div class="icon">🐎</div>
-        <div class="label">Лошади</div>
-        <div class="num" id="ph-cnt-horse">0</div>
+      <div class="fps-row">
+        FPS: <span id="fps-val">—</span> &nbsp;|&nbsp;
+        Кадров обработано: <span id="frames-val">0</span> &nbsp;|&nbsp;
+        Порог: <span>40%</span>
       </div>
     </div>
+  </div>
+</div>
 
-    <!-- Alert -->
-    <div class="alert alert-ok"   id="ph-ok"></div>
-    <div class="alert alert-warn" id="ph-warn"></div>
-    <div class="alert alert-err"  id="ph-err"></div>
+<!-- ── PHOTO PANEL ────────────────────────────────────────────── -->
+<div class="panel" id="panel-ph">
+  <div class="tip">
+    <strong>💡 Совет:</strong> снимайте сбоку или сверху при дневном свете.
+    Изображение автоматически улучшается перед анализом.
+  </div>
 
-    <!-- Drop zone -->
-    <div id="drop-zone"
-         onclick="document.getElementById('photo-file').click()"
-         ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event)">
-      <div class="dz-icon">🖼️</div>
-      <div class="dz-title">Перетащите фото сюда</div>
-      <div class="dz-sub">или нажмите, чтобы выбрать файл</div>
-      <button class="btn btn-green" style="margin-top:16px"
-              onclick="event.stopPropagation();document.getElementById('photo-file').click()">
-        📁 Выбрать фото
-      </button>
-      <input type="file" id="photo-file" accept="image/*"/>
+  <div class="photo-layout">
+    <!-- left -->
+    <div>
+      <div id="drop-zone"
+           onclick="document.getElementById('photo-file').click()"
+           ondragover="dzOver(event)" ondragleave="dzLeave()" ondrop="dzDrop(event)">
+        <div class="dz-ico">🖼️</div>
+        <div class="dz-t">Перетащите фото сюда</div>
+        <div class="dz-s">или нажмите кнопку ниже</div>
+        <button class="btn bg btn-sm" style="margin-top:14px"
+                onclick="event.stopPropagation();document.getElementById('photo-file').click()">
+          📁 Выбрать фото
+        </button>
+        <input type="file" id="photo-file" accept="image/*"/>
+      </div>
+
+      <div class="ph-spinner" id="ph-spinner">
+        <div class="spinner"></div>
+        <div class="spinner-lbl">Улучшаю изображение и анализирую…</div>
+      </div>
+
+      <div class="ph-canvas-wrap" id="ph-canvas-wrap">
+        <canvas id="photo-canvas"></canvas>
+      </div>
+
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn bo btn-sm" id="btn-reset-ph" onclick="resetPhoto()" style="display:none">
+          🔄 Другое фото
+        </button>
+      </div>
+
+      <div class="alert-strip ao" id="ph-ok"></div>
+      <div class="alert-strip aw" id="ph-warn"></div>
+      <div class="alert-strip ae" id="ph-err"></div>
     </div>
 
-    <!-- Spinner -->
-    <div class="spinner-wrap" id="ph-spinner">
-      <div class="spinner"></div>
-      <div class="spinner-label">Анализирую изображение…</div>
+    <!-- right: counter -->
+    <div class="ph-counter">
+      <div class="counter-header">
+        <div class="live-dot"></div>
+        РЕЗУЛЬТАТ АНАЛИЗА
+      </div>
+      <div class="counter-rows">
+        <div class="cnt-row" id="ph-row-cow">
+          <div class="cnt-icon">🐄</div>
+          <div class="cnt-label">Коровы</div>
+          <div class="cnt-num" id="ph-n-cow">—</div>
+        </div>
+        <div class="cnt-row" id="ph-row-sheep">
+          <div class="cnt-icon">🐑</div>
+          <div class="cnt-label">Овцы</div>
+          <div class="cnt-num" id="ph-n-sheep">—</div>
+        </div>
+        <div class="cnt-row" id="ph-row-horse">
+          <div class="cnt-icon">🐎</div>
+          <div class="cnt-label">Лошади</div>
+          <div class="cnt-num" id="ph-n-horse">—</div>
+        </div>
+      </div>
+      <div class="counter-total">
+        <div class="total-label">ИТОГО</div>
+        <div class="total-num" id="ph-total">—</div>
+      </div>
     </div>
-
-    <!-- Result canvas -->
-    <div class="media-wrap" id="ph-canvas-wrap" style="display:none">
-      <canvas id="photo-canvas"></canvas>
-    </div>
-
-    <div id="ph-reset-wrap" style="display:none;text-align:center;margin-top:12px">
-      <button class="btn btn-outline" onclick="resetPhoto()">🔄 Загрузить другое фото</button>
-    </div>
-
-  </div><!-- /panel-photo -->
+  </div>
+</div>
 
 </main>
+<footer>Все вычисления локальны · Фото не передаются · TensorFlow.js + COCO-SSD · GitHub Pages</footer>
+</div><!-- /app -->
 
-<footer>
-  Все вычисления выполняются локально на вашем устройстве · Фото не передаются в сеть<br>
-  TensorFlow.js + COCO-SSD (MobileNet v2) · Работает на GitHub Pages
-</footer>
-
-<!-- ═══ SCRIPT ════════════════════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════════════════════════
+     SCRIPTS
+═══════════════════════════════════════════════════════════ -->
+<!-- TF.js -->
 <script>
-/* ── Constants ──────────────────────────────────────────────── */
+window._tfReady = false;
+window._cocoReady = false;
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"
+        onload="window._tfReady=true"
+        onerror="loadTFFallback()"></script>
+<script>
+function loadTFFallback(){
+  setStage('TensorFlow.js: резервный CDN…');
+  var s=document.createElement('script');
+  s.src='https://unpkg.com/@tensorflow/tfjs@4.17.0/dist/tf.min.js';
+  s.onload=function(){window._tfReady=true};
+  document.head.appendChild(s);
+}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"
+        onload="window._cocoReady=true"
+        onerror="loadCocoFallback()"></script>
+<script>
+function loadCocoFallback(){
+  setStage('COCO-SSD: резервный CDN…');
+  var s=document.createElement('script');
+  s.src='https://unpkg.com/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js';
+  s.onload=function(){window._cocoReady=true};
+  document.head.appendChild(s);
+}
+</script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   CONSTANTS
+═══════════════════════════════════════════════════════════════ */
 const ANIMALS   = ['cow','sheep','horse'];
 const LABELS    = {cow:'Коровы',sheep:'Овцы',horse:'Лошади'};
-const COLORS    = {cow:'#c0452a',sheep:'#5aabcc',horse:'#d4900a'};
-const THRESHOLD = 0.60;
+const BOX_CLR   = {cow:'#cc4422',sheep:'#4aa8cc',horse:'#d4920c'};
+const THRESHOLD = 0.40;   // lower = more detections
+const INPUT_W   = 800;    // resize before detect
+const INPUT_H   = 600;
+const HISTORY   = 3;      // frames to average
+const IOU_THR   = 0.45;   // NMS IoU threshold
+const DETECT_MS = 500;    // interval between detections
 
-/* ── Model state ────────────────────────────────────────────── */
-let model      = null;
-let modelState = 'idle'; // idle | loading | ready | error
-
-const MODEL_URLS = [
-  // Primary: jsdelivr (fast, CORS-OK)
-  null, // null = use cocoSsd.load() default (loads from jsDelivr automatically)
-  // Fallback: unpkg
-  'https://unpkg.com/@tensorflow-models/coco-ssd@2.2.3'
-];
-let modelUrlIdx = 0;
-
-/* ── DOM helpers ────────────────────────────────────────────── */
-const $ = id => document.getElementById(id);
-
-function setModelStatus(state, msg){
-  modelState = state;
-  const el = $('model-status');
-  el.className = state;
-  $('model-status-text').textContent = msg;
-  $('retry-wrap').classList.toggle('visible', state === 'error');
+/* ═══════════════════════════════════════════════════════════════
+   PROGRESS BAR
+═══════════════════════════════════════════════════════════════ */
+function setProgress(pct){
+  document.getElementById('prog-bar').style.width = pct+'%';
+  document.getElementById('load-pct').textContent = Math.round(pct)+'%';
+}
+function setStage(txt){
+  document.getElementById('load-stage').textContent = txt;
 }
 
-/* ── Model loading with retry ───────────────────────────────── */
-async function initModel(force){
-  if(modelState === 'ready' && !force) return;
-  if(modelState === 'loading') return;
+/* ═══════════════════════════════════════════════════════════════
+   MODEL LOADING
+═══════════════════════════════════════════════════════════════ */
+let model = null;
 
-  setModelStatus('loading','Загрузка модели ИИ…');
+async function waitLibs(){
+  setStage('Загрузка TensorFlow.js…');
+  let tries=0;
+  while(!(window._tfReady && window._cocoReady)){
+    await sleep(300); tries++;
+    if(tries>60) throw new Error('Библиотеки не загрузились за 18 секунд');
+    setProgress(Math.min(tries*1.2,18));
+  }
+}
 
-  for(let attempt = 0; attempt < 3; attempt++){
-    try{
-      await waitForLibs();
+async function initModel(retry){
+  const errEl = document.getElementById('load-err');
+  errEl.classList.remove('visible');
+  setProgress(0); setStage('Инициализация…');
 
-      const opts = {base:'mobilenet_v2'};
-      model = await cocoSsd.load(opts);
+  // timeout warning
+  const warnTimer = setTimeout(()=>{
+    setStage('⚠️ Загрузка занимает более 10 сек. Проверьте интернет…');
+  }, 10000);
 
-      setModelStatus('ready','✅ Модель загружена и готова');
-      $('retry-wrap').classList.remove('visible');
-      return;
-    }catch(e){
-      console.warn(`Model load attempt ${attempt+1} failed:`, e);
-      if(attempt < 2){
-        await sleep(2500);
-      }
+  try{
+    await waitLibs();
+    setProgress(20); setStage('Загрузка TensorFlow.js — ✓');
+    await sleep(200);
+
+    setStage('Инициализация WebGL-бэкенда…');
+    await tf.setBackend('webgl');
+    await tf.ready();
+    setProgress(35); setStage('WebGL готов ✓');
+    await sleep(150);
+
+    setStage('Загрузка весов COCO-SSD MobileNet v2…');
+    // Emulate smooth progress while loading weights (they load async internally)
+    let fakePct = 35;
+    const fakeInterval = setInterval(()=>{
+      if(fakePct < 88){ fakePct += (88-fakePct)*0.06 + 0.3; setProgress(fakePct); }
+    }, 200);
+
+    model = await cocoSsd.load({base:'mobilenet_v2'});
+    clearInterval(fakeInterval);
+    setProgress(92); setStage('Веса модели загружены ✓');
+    await sleep(150);
+
+    // Warm-up pass to pre-compile shaders
+    setStage('Прогрев GPU-шейдеров…');
+    const warmup = tf.zeros([1, INPUT_H, INPUT_W, 3]);
+    await model.detect(warmup);
+    warmup.dispose();
+    setProgress(100); setStage('Модель готова ✓');
+    await sleep(400);
+
+    clearTimeout(warnTimer);
+    showApp();
+
+  }catch(e){
+    clearTimeout(warnTimer);
+    console.error('Model load error:', e);
+    setProgress(0);
+    setStage('Ошибка загрузки');
+    document.getElementById('load-err-text').textContent = 'Ошибка: ' + e.message;
+    errEl.classList.add('visible');
+  }
+}
+
+function retryLoad(){ initModel(true); }
+
+function showApp(){
+  const ls = document.getElementById('loading-screen');
+  ls.classList.add('fade-out');
+  setTimeout(()=>{ ls.style.display='none'; }, 520);
+  const app = document.getElementById('app');
+  app.classList.add('visible');
+  // Show no-signal state
+  document.getElementById('cam-nosignal').classList.add('visible');
+  document.getElementById('cam-wrap').style.display='none';
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   IMAGE ENHANCEMENT
+═══════════════════════════════════════════════════════════════ */
+/**
+ * enhanceImage(srcCanvas) → returns new canvas with:
+ *   1. Contrast stretch (global histogram)
+ *   2. Sharpen kernel [[0,-1,0],[-1,5,-1],[0,-1,0]]
+ *   3. Scaled to INPUT_W×INPUT_H
+ */
+function enhanceImage(srcCanvas){
+  // Step 1: scale to target resolution
+  const scaled = document.createElement('canvas');
+  scaled.width = INPUT_W; scaled.height = INPUT_H;
+  const sc = scaled.getContext('2d');
+  sc.drawImage(srcCanvas, 0, 0, INPUT_W, INPUT_H);
+
+  const id = sc.getImageData(0, 0, INPUT_W, INPUT_H);
+  const d  = id.data;
+  const len = d.length;
+
+  // Step 2: Contrast stretch per channel
+  const min = [255,255,255], max = [0,0,0];
+  for(let i=0;i<len;i+=4){
+    for(let c=0;c<3;c++){
+      const v=d[i+c];
+      if(v<min[c]) min[c]=v;
+      if(v>max[c]) max[c]=v;
     }
   }
-  setModelStatus('error','❌ Не удалось загрузить модель. Проверьте интернет.');
+  for(let i=0;i<len;i+=4){
+    for(let c=0;c<3;c++){
+      const rng = max[c]-min[c]||1;
+      d[i+c] = Math.round((d[i+c]-min[c])/rng*255);
+    }
+  }
+  sc.putImageData(id, 0, 0);
+
+  // Step 3: Sharpen via convolution
+  const out = document.createElement('canvas');
+  out.width = INPUT_W; out.height = INPUT_H;
+  const oc = out.getContext('2d');
+
+  // Use CSS filter for cheap sharpening (browser-native, fast)
+  oc.filter = 'contrast(1.15) saturate(1.1)';
+  oc.drawImage(scaled, 0, 0);
+  oc.filter = 'none';
+
+  // Apply sharpen kernel manually on a small temp canvas
+  // (Full per-pixel kernel on 800×600 is too slow for realtime;
+  //  we use a two-pass approach: unsharp mask via blur diff)
+  const blur = document.createElement('canvas');
+  blur.width = INPUT_W; blur.height = INPUT_H;
+  const bc = blur.getContext('2d');
+  bc.filter = 'blur(1px)';
+  bc.drawImage(out, 0, 0);
+  bc.filter = 'none';
+
+  const orig = oc.getImageData(0,0,INPUT_W,INPUT_H).data;
+  const blrd = bc.getImageData(0,0,INPUT_W,INPUT_H).data;
+  const res  = oc.getImageData(0,0,INPUT_W,INPUT_H);
+  const rd   = res.data;
+  const AMOUNT = 1.4; // unsharp mask strength
+  for(let i=0;i<orig.length;i+=4){
+    for(let c=0;c<3;c++){
+      rd[i+c] = Math.min(255,Math.max(0, Math.round(orig[i+c] + AMOUNT*(orig[i+c]-blrd[i+c]))));
+    }
+  }
+  oc.putImageData(res,0,0);
+  return out;
 }
 
-function waitForLibs(){
-  return new Promise((resolve,reject)=>{
-    let tries = 0;
-    const t = setInterval(()=>{
-      tries++;
-      if(typeof cocoSsd !== 'undefined' && typeof tf !== 'undefined'){
-        clearInterval(t); resolve();
-      }
-      if(tries > 40){ clearInterval(t); reject(new Error('Libs not loaded')); }
-    }, 250);
-  });
+/* ═══════════════════════════════════════════════════════════════
+   NON-MAXIMUM SUPPRESSION
+═══════════════════════════════════════════════════════════════ */
+function iou(a,b){
+  const [ax,ay,aw,ah]=a.bbox, [bx,by,bw,bh]=b.bbox;
+  const ix=Math.max(ax,bx), iy=Math.max(ay,by);
+  const ix2=Math.min(ax+aw,bx+bw), iy2=Math.min(ay+ah,by+bh);
+  const inter=Math.max(0,ix2-ix)*Math.max(0,iy2-iy);
+  return inter/(aw*ah+bw*bh-inter);
+}
+function nms(preds, iouThr){
+  const sorted = [...preds].sort((a,b)=>b.score-a.score);
+  const keep = [];
+  const used = new Set();
+  for(let i=0;i<sorted.length;i++){
+    if(used.has(i)) continue;
+    keep.push(sorted[i]);
+    for(let j=i+1;j<sorted.length;j++){
+      if(!used.has(j) && sorted[i].class===sorted[j].class && iou(sorted[i],sorted[j])>iouThr)
+        used.add(j);
+    }
+  }
+  return keep;
 }
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-/* ── Tab switching ──────────────────────────────────────────── */
-function switchTab(name){
-  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  $(`panel-${name}`).classList.add('active');
-  $(`tab-${name}-btn`).classList.add('active');
-  if(name !== 'cam') stopCamera();
+/* ═══════════════════════════════════════════════════════════════
+   FRAME HISTORY (rolling average of last N frames)
+═══════════════════════════════════════════════════════════════ */
+const frameHistory = []; // array of {cow,sheep,horse}
+function pushHistory(counts){
+  frameHistory.push({...counts});
+  if(frameHistory.length > HISTORY) frameHistory.shift();
+}
+function avgHistory(){
+  const acc={cow:0,sheep:0,horse:0};
+  frameHistory.forEach(f=>ANIMALS.forEach(a=>acc[a]+=f[a]));
+  const n=frameHistory.length||1;
+  ANIMALS.forEach(a=>acc[a]=Math.round(acc[a]/n));
+  return acc;
 }
 
-/* ════════════════════════════════════════════════════════════════
-   CAMERA TAB
-════════════════════════════════════════════════════════════════ */
-let camStream    = null;
-let camRafId     = null;
-let lastDetectMs = 0;
-let fpsFrames    = 0;
-let fpsTimer     = null;
+/* ═══════════════════════════════════════════════════════════════
+   CAMERA
+═══════════════════════════════════════════════════════════════ */
+let camStream=null, camRafId=null;
+let lastDetectTs=0, fpsFrames=0, fpsTimer=null, totalFrames=0;
 
 async function startCamera(){
-  if(modelState !== 'ready'){
-    showAlert('cam-err','⚠️ Дождитесь загрузки модели ИИ.'); return;
-  }
   hideAlert('cam-err'); hideAlert('cam-warn');
   try{
     camStream = await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}},
+      video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}},
       audio:false
     });
   }catch(e){
-    showAlert('cam-err',`❌ Камера недоступна: ${e.message}. Проверьте разрешения браузера.`);
+    showAlert('cam-err','❌ Камера недоступна: '+e.message+'. Разрешите доступ в настройках браузера или загрузите фото.');
     return;
   }
+  const v = document.getElementById('cam-video');
+  v.srcObject = camStream;
+  await v.play();
 
-  const video = $('cam-video');
-  video.srcObject = camStream;
-  await video.play();
+  document.getElementById('cam-nosignal').classList.remove('visible');
+  document.getElementById('cam-wrap').style.display='block';
+  document.getElementById('btn-start').style.display='none';
+  document.getElementById('btn-stop').style.display='inline-flex';
+  document.getElementById('btn-snap').style.display='inline-flex';
+  document.getElementById('live-dot').classList.add('active');
 
-  $('cam-wrap').style.display='block';
-  $('btn-cam-start').style.display='none';
-  $('btn-cam-stop').style.display='inline-flex';
-
-  // Sync overlay canvas size to video
-  video.addEventListener('loadedmetadata',()=>{
-    syncOverlay();
-  });
-
-  // FPS counter
-  fpsFrames = 0;
-  fpsTimer = setInterval(()=>{ $('fps-val').textContent=fpsFrames; fpsFrames=0; },1000);
+  fpsFrames=0; totalFrames=0;
+  fpsTimer = setInterval(()=>{
+    document.getElementById('fps-val').textContent=fpsFrames;
+    fpsFrames=0;
+  },1000);
 
   camLoop();
 }
 
-function syncOverlay(){
-  const v = $('cam-video');
-  const c = $('cam-overlay');
-  c.width  = v.videoWidth  || v.clientWidth;
-  c.height = v.videoHeight || v.clientHeight;
+function stopCamera(){
+  if(camRafId){cancelAnimationFrame(camRafId);camRafId=null}
+  clearInterval(fpsTimer);
+  if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null}
+  const v=document.getElementById('cam-video');
+  v.srcObject=null;
+  document.getElementById('cam-wrap').style.display='none';
+  document.getElementById('cam-nosignal').classList.add('visible');
+  document.getElementById('btn-start').style.display='inline-flex';
+  document.getElementById('btn-stop').style.display='none';
+  document.getElementById('btn-snap').style.display='none';
+  document.getElementById('live-dot').classList.remove('active');
+  setCamCounts({cow:0,sheep:0,horse:0});
+  hideAlert('cam-warn');
+  frameHistory.length=0;
 }
 
-function stopCamera(){
-  if(camRafId){ cancelAnimationFrame(camRafId); camRafId=null; }
-  clearInterval(fpsTimer);
-  if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream=null; }
-  $('cam-wrap').style.display='none';
-  $('btn-cam-start').style.display='inline-flex';
-  $('btn-cam-stop').style.display='none';
-  $('fps-val').textContent='—';
-  setCamCounts({cow:0,sheep:0,horse:0});
-  clearOverlay();
+function syncOverlay(){
+  const v=document.getElementById('cam-video');
+  const c=document.getElementById('cam-overlay');
+  if(v.videoWidth){ c.width=v.videoWidth; c.height=v.videoHeight; }
 }
 
 async function camLoop(){
-  const video  = $('cam-video');
-  const canvas = $('cam-overlay');
-  const ctx    = canvas.getContext('2d');
-  const INTERVAL = 500; // ms between detections (~2 fps detect; draw every frame)
+  const video   = document.getElementById('cam-video');
+  const overlay = document.getElementById('cam-overlay');
+  const octx    = overlay.getContext('2d');
 
   async function frame(ts){
     camRafId = requestAnimationFrame(frame);
     fpsFrames++;
 
-    // sync canvas size in case window resized
-    if(canvas.width !== video.videoWidth && video.videoWidth > 0) syncOverlay();
-
-    if(ts - lastDetectMs < INTERVAL) return;
+    if(overlay.width !== video.videoWidth && video.videoWidth) syncOverlay();
+    if(ts - lastDetectTs < DETECT_MS) return;
     if(!model || video.readyState < 2) return;
-    lastDetectMs = ts;
+    lastDetectTs = ts;
+    totalFrames++;
+    document.getElementById('frames-val').textContent=totalFrames;
 
+    // Grab current video frame to a canvas
+    const grab = document.createElement('canvas');
+    grab.width=video.videoWidth||INPUT_W;
+    grab.height=video.videoHeight||INPUT_H;
+    grab.getContext('2d').drawImage(video,0,0);
+
+    // Enhance → detect
+    const enhanced = enhanceImage(grab);
     let preds;
-    try{ preds = await model.detect(video); }
+    try{ preds = await model.detect(enhanced); }
     catch(e){ return; }
 
-    const animals = preds.filter(p=>ANIMALS.includes(p.class) && p.score>=THRESHOLD);
-    const counts  = {cow:0,sheep:0,horse:0};
-    animals.forEach(p=>counts[p.class]++);
+    // Filter animals + NMS
+    const animals = nms(
+      preds.filter(p=>ANIMALS.includes(p.class) && p.score>=THRESHOLD),
+      IOU_THR
+    );
 
-    setCamCounts(counts);
+    // Count + history
+    const raw={cow:0,sheep:0,horse:0};
+    animals.forEach(p=>raw[p.class]++);
+    pushHistory(raw);
+    const avg = avgHistory();
+    setCamCounts(avg);
 
-    // Draw overlay
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    const scaleX = canvas.width  / (video.videoWidth  || canvas.width);
-    const scaleY = canvas.height / (video.videoHeight || canvas.height);
-    animals.forEach(p=>drawBox(ctx,p,scaleX,scaleY,canvas));
+    // Draw boxes (scale from INPUT to actual overlay size)
+    octx.clearRect(0,0,overlay.width,overlay.height);
+    const sx = overlay.width/INPUT_W, sy = overlay.height/INPUT_H;
+    animals.forEach(p=>drawBox(octx,p,sx,sy,overlay));
 
-    const total = counts.cow+counts.sheep+counts.horse;
-    if(total===0) showAlert('cam-warn','Животные не обнаружены');
+    const total = avg.cow+avg.sheep+avg.horse;
+    if(total===0) showAlert('cam-warn','Животные не обнаружены в кадре');
     else hideAlert('cam-warn');
   }
   camRafId = requestAnimationFrame(frame);
 }
 
+function snapPhoto(){
+  const v=document.getElementById('cam-video');
+  const c=document.createElement('canvas');
+  c.width=v.videoWidth; c.height=v.videoHeight;
+  c.getContext('2d').drawImage(v,0,0);
+  c.toBlob(blob=>{
+    switchTab('ph');
+    setTimeout(()=>processPhoto(blob),100);
+  },'image/jpeg',0.95);
+}
+
 function setCamCounts(c){
+  let total=0;
   ANIMALS.forEach(a=>{
-    const n = c[a]||0;
-    $(`cam-cnt-${a}`).textContent = n;
-    $(`cam-card-${a}`).classList.toggle('hit', n>0);
+    const n=c[a]||0; total+=n;
+    const el=document.getElementById('cam-n-'+a);
+    const old=parseInt(el.textContent)||0;
+    el.textContent=n;
+    if(n!==old){ el.classList.add('flash'); setTimeout(()=>el.classList.remove('flash'),300); }
+    document.getElementById('cam-row-'+a).classList.toggle('hit',n>0);
   });
+  document.getElementById('cam-total').textContent=total;
 }
 
-function clearOverlay(){
-  const c = $('cam-overlay');
-  c.getContext('2d').clearRect(0,0,c.width,c.height);
-}
-
-/* ════════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    PHOTO TAB
-════════════════════════════════════════════════════════════════ */
-function dzOver(e){ e.preventDefault(); $('drop-zone').classList.add('over'); }
-function dzLeave(e){ $('drop-zone').classList.remove('over'); }
+═══════════════════════════════════════════════════════════════ */
+function dzOver(e){ e.preventDefault(); document.getElementById('drop-zone').classList.add('over'); }
+function dzLeave(){ document.getElementById('drop-zone').classList.remove('over'); }
 function dzDrop(e){
-  e.preventDefault(); $('drop-zone').classList.remove('over');
-  const f = e.dataTransfer.files[0];
-  if(f && f.type.startsWith('image/')) processPhoto(f);
+  e.preventDefault(); dzLeave();
+  const f=e.dataTransfer.files[0];
+  if(f&&f.type.startsWith('image/')) processPhoto(f);
 }
-$('photo-file').addEventListener('change',()=>{
-  if($('photo-file').files[0]) processPhoto($('photo-file').files[0]);
+document.getElementById('photo-file').addEventListener('change',()=>{
+  const f=document.getElementById('photo-file').files[0];
+  if(f) processPhoto(f);
 });
 
 async function processPhoto(file){
-  if(modelState!=='ready'){
-    showAlert('ph-err','⚠️ Дождитесь загрузки модели ИИ.'); return;
-  }
   hideAlert('ph-ok'); hideAlert('ph-warn'); hideAlert('ph-err');
+  document.getElementById('drop-zone').style.display='none';
+  document.getElementById('ph-canvas-wrap').style.display='none';
+  document.getElementById('btn-reset-ph').style.display='none';
+  document.getElementById('ph-spinner').classList.add('visible');
+  setPhCounts(null);
 
-  $('drop-zone').style.display='none';
-  $('ph-spinner').classList.add('visible');
-  $('ph-canvas-wrap').style.display='none';
-  $('ph-reset-wrap').style.display='none';
-  setPhotoCounts({cow:0,sheep:0,horse:0});
+  const img=new Image();
+  img.onload=async()=>{
+    const src=document.createElement('canvas');
+    src.width=img.naturalWidth; src.height=img.naturalHeight;
+    src.getContext('2d').drawImage(img,0,0);
 
-  const img = new Image();
-  img.onload = async ()=>{
-    const canvas = $('photo-canvas');
-    canvas.width  = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img,0,0);
-
+    const enhanced=enhanceImage(src);
     let preds;
-    try{ preds = await model.detect(canvas); }
+    try{ preds=await model.detect(enhanced); }
     catch(e){
-      $('ph-spinner').classList.remove('visible');
-      showAlert('ph-err','❌ Ошибка при анализе. Попробуйте другое фото.');
-      $('ph-reset-wrap').style.display='block';
+      endPhotoSpinner();
+      showAlert('ph-err','❌ Ошибка анализа: '+e.message);
+      document.getElementById('btn-reset-ph').style.display='inline-flex';
       return;
     }
 
-    const animals = preds.filter(p=>ANIMALS.includes(p.class) && p.score>=THRESHOLD);
-    const counts  = {cow:0,sheep:0,horse:0};
+    const animals = nms(
+      preds.filter(p=>ANIMALS.includes(p.class) && p.score>=THRESHOLD),
+      IOU_THR
+    );
+    const counts={cow:0,sheep:0,horse:0};
     animals.forEach(p=>counts[p.class]++);
-    animals.forEach(p=>drawBox(ctx,p,1,1,canvas));
 
-    setPhotoCounts(counts);
+    // Draw on ORIGINAL size canvas (for display)
+    const out=document.getElementById('photo-canvas');
+    out.width=img.naturalWidth; out.height=img.naturalHeight;
+    const oc=out.getContext('2d');
+    oc.drawImage(img,0,0); // draw original (not enhanced) for best look
+    const sx=img.naturalWidth/INPUT_W, sy=img.naturalHeight/INPUT_H;
+    animals.forEach(p=>drawBox(oc,p,sx,sy,out));
 
-    const total = counts.cow+counts.sheep+counts.horse;
+    setPhCounts(counts);
+    const total=counts.cow+counts.sheep+counts.horse;
     if(total===0){
-      showAlert('ph-warn','⚠️ Животные не обнаружены. Попробуйте фото при лучшем освещении или снятое ближе.');
-    }else{
+      showAlert('ph-warn','⚠️ Животные не обнаружены. Попробуйте фото с лучшим освещением, ближе и без размытия.');
+    } else {
       const parts=[];
       if(counts.cow)   parts.push(`коров: <b>${counts.cow}</b>`);
       if(counts.sheep) parts.push(`овец: <b>${counts.sheep}</b>`);
@@ -678,81 +964,97 @@ async function processPhoto(file){
       showAlert('ph-ok',`🎉 Найдено: ${parts.join(', ')} — итого <b>${total}</b>`);
     }
 
-    $('ph-spinner').classList.remove('visible');
-    $('ph-canvas-wrap').style.display='block';
-    $('ph-reset-wrap').style.display='block';
+    endPhotoSpinner();
+    document.getElementById('ph-canvas-wrap').style.display='block';
+    document.getElementById('btn-reset-ph').style.display='inline-flex';
   };
-  img.onerror = ()=>{
-    $('ph-spinner').classList.remove('visible');
+  img.onerror=()=>{
+    endPhotoSpinner();
     showAlert('ph-err','❌ Не удалось открыть изображение.');
-    $('ph-reset-wrap').style.display='block';
+    document.getElementById('btn-reset-ph').style.display='inline-flex';
   };
-  img.src = URL.createObjectURL(file);
+  img.src = file instanceof Blob ? URL.createObjectURL(file) : file;
 }
 
-function setPhotoCounts(c){
+function endPhotoSpinner(){
+  document.getElementById('ph-spinner').classList.remove('visible');
+}
+
+function setPhCounts(c){
   ANIMALS.forEach(a=>{
-    const n = c[a]||0;
-    $(`ph-cnt-${a}`).textContent = n;
-    $(`ph-card-${a}`).classList.toggle('hit', n>0);
+    const n=c?c[a]:null;
+    document.getElementById('ph-n-'+a).textContent = n===null?'—':n;
+    document.getElementById('ph-row-'+a).classList.toggle('hit', n>0);
   });
+  const total=c?ANIMALS.reduce((s,a)=>s+c[a],0):null;
+  document.getElementById('ph-total').textContent=total===null?'—':total;
 }
 
 function resetPhoto(){
-  $('drop-zone').style.display='block';
-  $('ph-canvas-wrap').style.display='none';
-  $('ph-reset-wrap').style.display='none';
+  document.getElementById('drop-zone').style.display='block';
+  document.getElementById('ph-canvas-wrap').style.display='none';
+  document.getElementById('btn-reset-ph').style.display='none';
+  document.getElementById('photo-file').value='';
   hideAlert('ph-ok'); hideAlert('ph-warn'); hideAlert('ph-err');
-  $('photo-file').value='';
-  setPhotoCounts({cow:0,sheep:0,horse:0});
-  const c = $('photo-canvas');
-  c.getContext('2d').clearRect(0,0,c.width,c.height);
+  setPhCounts(null);
 }
 
-/* ════════════════════════════════════════════════════════════════
-   SHARED: Draw bounding box
-════════════════════════════════════════════════════════════════ */
-function drawBox(ctx, pred, scaleX, scaleY, canvas){
-  const [x,y,w,h] = pred.bbox;
-  const sx = x*scaleX, sy = y*scaleY, sw = w*scaleX, sh = h*scaleY;
-  const color  = COLORS[pred.class]||'#fff';
-  const label  = `${LABELS[pred.class]} ${Math.round(pred.score*100)}%`;
-  const scale  = Math.max(canvas.width,canvas.height)/700;
-  const lw     = Math.max(2, Math.round(3*scale));
-  const fs     = Math.max(13, Math.round(16*scale));
-  const pad    = Math.round(5*scale);
+/* ═══════════════════════════════════════════════════════════════
+   DRAW BOX
+═══════════════════════════════════════════════════════════════ */
+function drawBox(ctx,pred,sx,sy,canvas){
+  const [x,y,w,h]=pred.bbox;
+  const rx=x*sx, ry=y*sy, rw=w*sx, rh=h*sy;
+  const col=BOX_CLR[pred.class]||'#fff';
+  const lbl=`${LABELS[pred.class]} ${Math.round(pred.score*100)}%`;
+  const sc=Math.max(canvas.width,canvas.height)/700;
+  const lw=Math.max(2,Math.round(2.5*sc));
+  const fs=Math.max(13,Math.round(15*sc));
+  const pad=Math.round(5*sc);
 
-  ctx.lineWidth   = lw;
-  ctx.strokeStyle = color;
-  ctx.strokeRect(sx,sy,sw,sh);
+  // Box
+  ctx.strokeStyle=col; ctx.lineWidth=lw;
+  ctx.strokeRect(rx,ry,rw,rh);
 
-  // Corner markers
-  const cs = Math.min(sw,sh)*0.15;
-  ctx.lineWidth = lw*1.8;
-  [[sx,sy],[sx+sw,sy],[sx,sy+sh],[sx+sw,sy+sh]].forEach(([cx,cy],i)=>{
-    ctx.beginPath();
-    const dx = i%2===0?1:-1, dy = i<2?1:-1;
+  // Corner accents
+  const cs=Math.min(rw,rh)*0.18;
+  ctx.lineWidth=lw*2;
+  [[rx,ry,1,1],[rx+rw,ry,-1,1],[rx,ry+rh,1,-1],[rx+rw,ry+rh,-1,-1]].forEach(([cx,cy,dx,dy])=>{
+    ctx.beginPath(); ctx.strokeStyle=col;
     ctx.moveTo(cx+dx*cs,cy); ctx.lineTo(cx,cy); ctx.lineTo(cx,cy+dy*cs);
     ctx.stroke();
   });
-  ctx.lineWidth = lw;
+  ctx.lineWidth=lw;
 
-  // Label
-  ctx.font = `bold ${fs}px Nunito,sans-serif`;
-  const tw = ctx.measureText(label).width+pad*2;
-  const th = fs+pad*2;
-  ctx.fillStyle = color;
-  ctx.fillRect(sx, sy-th, tw, th);
-  ctx.fillStyle = '#fff';
-  ctx.fillText(label, sx+pad, sy-pad);
+  // Label bg
+  ctx.font=`bold ${fs}px 'Roboto Condensed',sans-serif`;
+  const tw=ctx.measureText(lbl).width+pad*2;
+  const th=fs+pad*2;
+  ctx.fillStyle=col;
+  ctx.fillRect(rx,ry-th,tw,th);
+  ctx.fillStyle='#fff';
+  ctx.fillText(lbl,rx+pad,ry-pad);
 }
 
-/* ── Alert helpers ──────────────────────────────────────────── */
-function showAlert(id,html){ const el=$(id); el.innerHTML=html; el.classList.add('visible'); }
-function hideAlert(id){ const el=$(id); el.classList.remove('visible'); }
+/* ═══════════════════════════════════════════════════════════════
+   TABS / ALERTS / UTILS
+═══════════════════════════════════════════════════════════════ */
+function switchTab(name){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  document.getElementById('tab-'+name+'-btn').classList.add('active');
+  if(name!=='cam') stopCamera();
+}
 
-/* ── Boot ───────────────────────────────────────────────────── */
-initModel();
+function showAlert(id,html){ const e=document.getElementById(id); e.innerHTML=html; e.classList.add('visible'); }
+function hideAlert(id){ document.getElementById(id).classList.remove('visible'); }
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+/* ═══════════════════════════════════════════════════════════════
+   BOOT
+═══════════════════════════════════════════════════════════════ */
+window.addEventListener('DOMContentLoaded', ()=>initModel());
 </script>
 </body>
 </html>
