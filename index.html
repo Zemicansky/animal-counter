@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
-<title>AI Счётчик животных — Ферма v4</title>
+<title>AI Счётчик животных — Ферма v4.1</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700;900&family=Roboto:wght@400;500&display=swap" rel="stylesheet"/>
 
@@ -138,7 +138,7 @@ header{
 /* ── Main content ───────────────────────────────────────────── */
 main{
   flex:1;
-  padding:12px 16px 80px; /* bottom padding leaves room for fixed counter on mobile */
+  padding:12px 16px 24px;
   width:100%;
   max-width:1200px;
   margin:0 auto;
@@ -165,7 +165,7 @@ main{
   gap:14px;
   align-items:start;
 }
-@media(max-width:640px){
+@media(max-width:768px){
   .cam-grid{grid-template-columns:1fr}
 }
 
@@ -181,7 +181,7 @@ main{
   max-height:75vw; /* prevent overly tall on portrait */
   object-fit:cover;
 }
-@media(min-width:641px){
+@media(min-width:769px){
   #cam-video{max-height:55vh}
 }
 #cam-overlay{
@@ -226,18 +226,15 @@ main{
 }
 
 /* Mobile: replace sticky sidebar with fixed bottom bar */
-@media(max-width:640px){
+@media(max-width:768px){
   .cam-counter-col{
-    position:fixed;
-    bottom:0;left:0;right:0;
-    border-radius:16px 16px 0 0;
-    border-left:none;border-right:none;border-bottom:none;
-    border-top:2px solid var(--border);
-    z-index:100;
-    box-shadow:0 -6px 24px rgba(0,0,0,.7);
-    /* allow inner content to scroll if needed */
-    max-height:45vh;
-    overflow-y:auto;
+    position:static;
+    border-radius:12px;
+    border:1px solid var(--border);
+    box-shadow:none;
+    max-height:none;
+    overflow-y:visible;
+    margin-top:10px;
   }
 }
 
@@ -255,14 +252,14 @@ main{
 
 /* On mobile the counter rows sit in a horizontal flex strip */
 .counter-rows{padding:4px 0}
-@media(max-width:640px){
+@media(max-width:768px){
   .counter-rows{
     display:flex;flex-direction:row;
     padding:0;
   }
   .counter-rows .cnt-row{
     flex:1;flex-direction:column;
-    padding:8px 6px;border-bottom:none;
+    padding:6px 4px;border-bottom:none;
     border-right:1px solid var(--border);
     gap:2px;
   }
@@ -282,14 +279,14 @@ main{
   font-size:clamp(1.4rem,4vw,2rem);flex-shrink:0;
   width:36px;text-align:center;
 }
-@media(max-width:640px){.cnt-icon{width:auto;font-size:1.5rem}}
+@media(max-width:768px){.cnt-icon{width:auto;font-size:1.3rem}}
 .cnt-label{
   font-family:'Roboto Condensed',sans-serif;font-weight:700;
   font-size:clamp(.78rem,2.5vw,.95rem);color:var(--muted);
   text-transform:uppercase;letter-spacing:.04em;
   flex:1;
 }
-@media(max-width:640px){.cnt-label{text-align:center;font-size:.7rem}}
+@media(max-width:768px){.cnt-label{text-align:center;font-size:.7rem}}
 
 /* THE BIG NUMBER */
 .cnt-num{
@@ -300,9 +297,9 @@ main{
   min-width:1.5ch;text-align:right;
   transition:color .3s,transform .2s;
 }
-@media(max-width:640px){
+@media(max-width:768px){
   .cnt-num{
-    font-size:clamp(2.8rem,10vw,4.5rem);
+    font-size:clamp(2rem,8vw,3rem);
     text-align:center;
     width:100%;
   }
@@ -324,8 +321,8 @@ main{
   display:flex;justify-content:space-between;align-items:center;
   border-top:2px solid var(--border);
 }
-@media(max-width:640px){
-  .counter-total{padding:8px 14px}
+@media(max-width:768px){
+  .counter-total{padding:6px 10px}
 }
 .total-label{
   font-family:'Roboto Condensed',sans-serif;font-weight:700;
@@ -346,7 +343,7 @@ main{
   font-size:.72rem;color:var(--muted);
 }
 .fps-row span{font-weight:700;color:var(--text)}
-@media(max-width:640px){.fps-row{display:none}} /* hide on mobile to save space */
+@media(max-width:768px){.fps-row{display:none}} /* hide on mobile to save space */
 
 /* ═══════════════════════════════════════════════════════════════
    3-SECOND CONFIRMATION OVERLAY
@@ -394,7 +391,7 @@ main{
 .photo-layout{
   display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;
 }
-@media(max-width:640px){.photo-layout{grid-template-columns:1fr}}
+@media(max-width:768px){.photo-layout{grid-template-columns:1fr}}
 
 #drop-zone{
   border:3px dashed var(--border);border-radius:12px;
@@ -436,7 +433,7 @@ main{
   border-radius:12px;overflow:hidden;
   position:sticky;top:12px;
 }
-@media(max-width:640px){
+@media(max-width:768px){
   .ph-counter{position:static}
 }
 
