@@ -3,11 +3,14 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
-<title>AI Счётчик животных — Ферма</title>
+<title>AI Счётчик животных — Ферма v3</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700;900&family=Roboto:wght@400;500&display=swap" rel="stylesheet"/>
 
 <style>
+/* ═══════════════════════════════════════════════════════════════
+   DESIGN TOKENS
+═══════════════════════════════════════════════════════════════ */
 :root{
   --bg:#0f1109;
   --surf:#181e10;
@@ -20,19 +23,24 @@
   --amber:#d4920c;
   --red:#cc3d22;
   --sky:#4aa8cc;
-  --cow:#cc4422;
-  --sheep:#4aa8cc;
-  --horse:#d4920c;
+  --cow-clr:#cc4422;
+  --sheep-clr:#4aa8cc;
+  --horse-clr:#d4920c;
+  --btn-min:48px;   /* WCAG touch target */
 }
+
+/* ── RESET ──────────────────────────────────────────────────── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;overflow-x:hidden}
+html{height:100%;-webkit-text-size-adjust:100%}
 body{
   font-family:'Roboto',sans-serif;
   background:var(--bg);color:var(--text);
-  min-height:100vh;
+  min-height:100%;overflow-x:hidden;
 }
 
-/* ── LOADING SCREEN ─────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════
+   LOADING SCREEN
+═══════════════════════════════════════════════════════════════ */
 #loading-screen{
   position:fixed;inset:0;z-index:1000;
   background:var(--bg);
@@ -49,7 +57,7 @@ body{
   font-size:clamp(1.2rem,5vw,1.8rem);text-align:center;
   color:var(--text);margin-bottom:6px;
 }
-.load-sub{font-size:.85rem;color:var(--muted);margin-bottom:32px;text-align:center}
+.load-sub{font-size:.85rem;color:var(--muted);margin-bottom:28px;text-align:center}
 
 .progress-outer{
   width:min(360px,90vw);height:18px;
@@ -59,98 +67,133 @@ body{
 .progress-inner{
   height:100%;border-radius:50px;
   background:linear-gradient(90deg,var(--green2),var(--green));
-  transition:width .4s ease;
-  width:0%;
+  transition:width .4s ease;width:0%;
   position:relative;overflow:hidden;
 }
 .progress-inner::after{
   content:'';position:absolute;inset:0;
-  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.25) 50%,transparent 100%);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.25),transparent);
   animation:shimmer 1.2s infinite;
 }
 @keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
-
 #load-pct{
   font-family:'Roboto Condensed',sans-serif;font-weight:700;
   font-size:1.1rem;color:var(--green);margin-bottom:8px;
 }
-#load-stage{font-size:.82rem;color:var(--muted);min-height:1.2em;text-align:center}
+#load-stage{font-size:.82rem;color:var(--muted);min-height:1.4em;text-align:center;max-width:320px}
 #load-err{
   display:none;margin-top:20px;text-align:center;
   background:#2e0f08;border:1px solid var(--red);
-  border-radius:10px;padding:14px 20px;max-width:360px;
+  border-radius:10px;padding:14px 20px;max-width:340px;
   font-size:.88rem;line-height:1.5;color:#f08060;
 }
 #load-err.visible{display:block}
 .btn-retry{
   display:inline-flex;align-items:center;gap:6px;
   background:var(--red);color:#fff;border:none;
-  border-radius:50px;padding:10px 22px;font-size:.9rem;font-weight:700;
-  cursor:pointer;margin-top:12px;
+  border-radius:50px;padding:12px 24px;font-size:.9rem;font-weight:700;
+  cursor:pointer;margin-top:12px;min-height:var(--btn-min);
   font-family:'Roboto Condensed',sans-serif;
 }
 
-/* ── APP SHELL ──────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════
+   APP SHELL
+═══════════════════════════════════════════════════════════════ */
 #app{display:none;flex-direction:column;min-height:100vh}
 #app.visible{display:flex}
 
+/* ── Header ─────────────────────────────────────────────────── */
 header{
   background:var(--surf);border-bottom:2px solid var(--border);
-  padding:14px 16px 0;
+  padding:12px 16px 0;
+  /* prevent overflow on narrow screens */
+  overflow:hidden;
 }
 .hdr-top{
-  max-width:1100px;margin:0 auto;
   display:flex;align-items:center;gap:10px;flex-wrap:wrap;
   margin-bottom:10px;
 }
-.hdr-logo{font-size:1.8rem}
+.hdr-logo{font-size:1.8rem;flex-shrink:0}
 .hdr-title{
   font-family:'Roboto Condensed',sans-serif;font-weight:900;
-  font-size:clamp(1rem,3.5vw,1.35rem);line-height:1.2;
+  font-size:clamp(.95rem,3.5vw,1.35rem);line-height:1.2;
 }
-.hdr-sub{font-size:.75rem;color:var(--muted);margin-top:2px}
+.hdr-sub{font-size:.72rem;color:var(--muted);margin-top:2px}
 
-.tabs{max-width:1100px;margin:0 auto;display:flex}
+/* ── Tabs ───────────────────────────────────────────────────── */
+.tabs{display:flex;border-top:1px solid var(--border);margin:0 -16px}
 .tab-btn{
   flex:1;border:none;background:transparent;
   color:var(--muted);font-family:'Roboto Condensed',sans-serif;
-  font-weight:700;font-size:1rem;
-  height:44px;cursor:pointer;
+  font-weight:700;font-size:.95rem;
+  min-height:var(--btn-min);cursor:pointer;
   border-bottom:3px solid transparent;
   display:flex;align-items:center;justify-content:center;gap:6px;
   transition:color .2s,border-color .2s;
+  padding:0 8px;
+  touch-action:manipulation;
 }
 .tab-btn:hover{color:var(--text)}
 .tab-btn.active{color:var(--green);border-bottom-color:var(--green)}
 
-main{flex:1;max-width:1100px;margin:0 auto;padding:16px 12px 48px;width:100%}
-.panel{display:none}.panel.active{display:block}
+/* ── Main content ───────────────────────────────────────────── */
+main{
+  flex:1;
+  padding:12px 16px 80px; /* bottom padding leaves room for fixed counter on mobile */
+  width:100%;
+  max-width:1200px;
+  margin:0 auto;
+}
+.panel{display:none}
+.panel.active{display:block}
 
-/* ── CAMERA LAYOUT ──────────────────────────────────────────── */
+/* ── Tip banner ─────────────────────────────────────────────── */
+.tip{
+  background:var(--card);border-left:3px solid var(--amber);
+  border-radius:0 8px 8px 0;padding:10px 14px;
+  font-size:.82rem;line-height:1.5;color:var(--muted);
+  margin-bottom:12px;
+}
+.tip strong{color:var(--text)}
+
+/* ═══════════════════════════════════════════════════════════════
+   CAMERA LAYOUT  — desktop: 50/50 side-by-side
+                  — mobile: video top, counter bottom (fixed)
+═══════════════════════════════════════════════════════════════ */
 .cam-grid{
   display:grid;
   grid-template-columns:1fr 1fr;
   gap:14px;
   align-items:start;
 }
-@media(max-width:640px){.cam-grid{grid-template-columns:1fr}}
+@media(max-width:640px){
+  .cam-grid{grid-template-columns:1fr}
+}
 
-/* video side */
-.cam-video-col{}
+/* ── Video column ───────────────────────────────────────────── */
 .media-wrap{
   position:relative;border-radius:12px;overflow:hidden;
   background:#000;line-height:0;
   box-shadow:0 6px 32px rgba(0,0,0,.6);
 }
-#cam-video{width:100%;display:block;border-radius:12px}
+#cam-video{
+  width:100%;display:block;border-radius:12px;
+  /* fill column, maintain aspect */
+  max-height:75vw; /* prevent overly tall on portrait */
+  object-fit:cover;
+}
+@media(min-width:641px){
+  #cam-video{max-height:55vh}
+}
 #cam-overlay{
   position:absolute;inset:0;width:100%;height:100%;
   pointer-events:none;border-radius:12px;
 }
+
 .cam-no-signal{
   display:none;
   background:var(--card);border-radius:12px;
-  min-height:220px;
+  min-height:200px;
   align-items:center;justify-content:center;
   flex-direction:column;gap:10px;color:var(--muted);
   font-size:.9rem;text-align:center;padding:20px;
@@ -158,79 +201,13 @@ main{flex:1;max-width:1100px;margin:0 auto;padding:16px 12px 48px;width:100%}
 .cam-no-signal.visible{display:flex}
 .cam-no-signal .ns-icon{font-size:3rem}
 
+/* ── Cam controls ───────────────────────────────────────────── */
 .cam-controls{
-  display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center;
+  display:flex;gap:8px;flex-wrap:wrap;
+  margin-top:10px;align-items:center;
 }
 
-/* counter side */
-.cam-counter-col{
-  background:var(--card);border:1px solid var(--border);
-  border-radius:12px;overflow:hidden;
-  position:sticky;top:12px;
-}
-.counter-header{
-  background:var(--border);padding:10px 16px;
-  font-family:'Roboto Condensed',sans-serif;font-weight:700;
-  font-size:.82rem;text-transform:uppercase;letter-spacing:.08em;
-  color:var(--muted);display:flex;align-items:center;gap:6px;
-}
-.live-dot{
-  width:8px;height:8px;border-radius:50%;background:var(--muted);
-  flex-shrink:0;
-}
-.live-dot.active{background:var(--green);animation:pulse 1.2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
-
-.counter-rows{padding:6px 0}
-.cnt-row{
-  display:flex;align-items:center;
-  padding:10px 16px;
-  border-bottom:1px solid var(--border);
-  gap:12px;
-  transition:background .2s;
-}
-.cnt-row:last-child{border-bottom:none}
-.cnt-row.hit{background:rgba(94,203,62,.06)}
-.cnt-icon{font-size:clamp(1.6rem,4vw,2.2rem);flex-shrink:0;width:44px;text-align:center}
-.cnt-label{
-  font-family:'Roboto Condensed',sans-serif;font-weight:700;
-  font-size:clamp(.85rem,2.5vw,1rem);color:var(--muted);
-  text-transform:uppercase;letter-spacing:.05em;
-  flex:1;
-}
-.cnt-num{
-  font-family:'Roboto Condensed',sans-serif;font-weight:900;
-  font-size:clamp(3rem,8vw,5.5rem);
-  line-height:1;
-  color:var(--text);
-  min-width:1.5ch;text-align:right;
-  transition:color .3s,transform .15s;
-}
-.cnt-num.flash{color:var(--green);transform:scale(1.08)}
-.cnt-row.hit .cnt-num{color:var(--green)}
-
-.counter-total{
-  background:rgba(94,203,62,.08);
-  padding:12px 16px;
-  display:flex;justify-content:space-between;align-items:center;
-  border-top:2px solid var(--border);
-}
-.total-label{
-  font-family:'Roboto Condensed',sans-serif;font-weight:700;
-  font-size:.9rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;
-}
-.total-num{
-  font-family:'Roboto Condensed',sans-serif;font-weight:900;
-  font-size:clamp(2rem,6vw,3.5rem);color:var(--green);line-height:1;
-}
-
-.fps-row{
-  padding:8px 16px;border-top:1px solid var(--border);
-  display:flex;gap:16px;font-size:.75rem;color:var(--muted);
-}
-.fps-row span{font-weight:700;color:var(--text)}
-
-/* alert strip */
+/* ── Alert strips ───────────────────────────────────────────── */
 .alert-strip{
   border-radius:8px;padding:10px 14px;font-size:.85rem;
   line-height:1.4;margin-top:10px;display:none;
@@ -240,22 +217,198 @@ main{flex:1;max-width:1100px;margin:0 auto;padding:16px 12px 48px;width:100%}
 .ae{background:#2a0e06;border-left:3px solid var(--red);color:#f08060}
 .ao{background:#0c1f08;border-left:3px solid var(--green);color:#7ed46a}
 
-/* ── PHOTO TAB ──────────────────────────────────────────────── */
-.photo-layout{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+/* ═══════════════════════════════════════════════════════════════
+   COUNTER PANEL (sidebar on desktop, fixed bottom bar on mobile)
+═══════════════════════════════════════════════════════════════ */
+.cam-counter-col{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:12px;overflow:hidden;
+  position:sticky;top:12px;
+}
+
+/* Mobile: replace sticky sidebar with fixed bottom bar */
+@media(max-width:640px){
+  .cam-counter-col{
+    position:fixed;
+    bottom:0;left:0;right:0;
+    border-radius:16px 16px 0 0;
+    border-left:none;border-right:none;border-bottom:none;
+    border-top:2px solid var(--border);
+    z-index:100;
+    box-shadow:0 -6px 24px rgba(0,0,0,.7);
+    /* allow inner content to scroll if needed */
+    max-height:45vh;
+    overflow-y:auto;
+  }
+}
+
+.counter-header{
+  background:var(--border);padding:8px 16px;
+  font-family:'Roboto Condensed',sans-serif;font-weight:700;
+  font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--muted);display:flex;align-items:center;gap:6px;
+}
+.live-dot{
+  width:8px;height:8px;border-radius:50%;background:var(--muted);flex-shrink:0;
+}
+.live-dot.active{background:var(--green);animation:blink 1.2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+/* On mobile the counter rows sit in a horizontal flex strip */
+.counter-rows{padding:4px 0}
+@media(max-width:640px){
+  .counter-rows{
+    display:flex;flex-direction:row;
+    padding:0;
+  }
+  .counter-rows .cnt-row{
+    flex:1;flex-direction:column;
+    padding:8px 6px;border-bottom:none;
+    border-right:1px solid var(--border);
+    gap:2px;
+  }
+  .counter-rows .cnt-row:last-child{border-right:none}
+}
+
+.cnt-row{
+  display:flex;align-items:center;
+  padding:8px 14px;
+  border-bottom:1px solid var(--border);
+  gap:10px;
+  transition:background .2s;
+}
+.cnt-row:last-child{border-bottom:none}
+.cnt-row.hit{background:rgba(94,203,62,.07)}
+.cnt-icon{
+  font-size:clamp(1.4rem,4vw,2rem);flex-shrink:0;
+  width:36px;text-align:center;
+}
+@media(max-width:640px){.cnt-icon{width:auto;font-size:1.5rem}}
+.cnt-label{
+  font-family:'Roboto Condensed',sans-serif;font-weight:700;
+  font-size:clamp(.78rem,2.5vw,.95rem);color:var(--muted);
+  text-transform:uppercase;letter-spacing:.04em;
+  flex:1;
+}
+@media(max-width:640px){.cnt-label{text-align:center;font-size:.7rem}}
+
+/* THE BIG NUMBER */
+.cnt-num{
+  font-family:'Roboto Condensed',sans-serif;font-weight:900;
+  /* Desktop ~5rem, mobile fills column at ~10vw minimum 3rem */
+  font-size:clamp(3rem,8vw,5.5rem);
+  line-height:1;color:var(--text);
+  min-width:1.5ch;text-align:right;
+  transition:color .3s,transform .2s;
+}
+@media(max-width:640px){
+  .cnt-num{
+    font-size:clamp(2.8rem,10vw,4.5rem);
+    text-align:center;
+    width:100%;
+  }
+}
+.cnt-num.flash{color:var(--green);transform:scale(1.1)}
+.cnt-row.hit .cnt-num{color:var(--green)}
+
+/* Confirmed (post-delay) number glows */
+.cnt-num.confirmed{
+  color:#fff;
+  text-shadow:0 0 16px var(--green),0 0 32px var(--green2);
+  animation:glow-pop .5s ease;
+}
+@keyframes glow-pop{0%{transform:scale(1.18)}100%{transform:scale(1)}}
+
+.counter-total{
+  background:rgba(94,203,62,.08);
+  padding:10px 14px;
+  display:flex;justify-content:space-between;align-items:center;
+  border-top:2px solid var(--border);
+}
+@media(max-width:640px){
+  .counter-total{padding:8px 14px}
+}
+.total-label{
+  font-family:'Roboto Condensed',sans-serif;font-weight:700;
+  font-size:.85rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;
+}
+.total-num{
+  font-family:'Roboto Condensed',sans-serif;font-weight:900;
+  font-size:clamp(2rem,6vw,3.5rem);color:var(--green);line-height:1;
+}
+.total-num.confirmed{
+  color:#fff;
+  text-shadow:0 0 20px var(--green);
+}
+
+.fps-row{
+  padding:6px 14px;border-top:1px solid var(--border);
+  display:flex;gap:12px;flex-wrap:wrap;
+  font-size:.72rem;color:var(--muted);
+}
+.fps-row span{font-weight:700;color:var(--text)}
+@media(max-width:640px){.fps-row{display:none}} /* hide on mobile to save space */
+
+/* ═══════════════════════════════════════════════════════════════
+   3-SECOND CONFIRMATION OVERLAY
+   Shows above the counter, inside .cam-counter-col
+═══════════════════════════════════════════════════════════════ */
+#confirm-bar{
+  display:none;
+  background:#12220a;
+  border-bottom:2px solid var(--amber);
+  padding:10px 14px;
+  flex-direction:column;
+  gap:6px;
+}
+#confirm-bar.visible{display:flex}
+
+.confirm-label{
+  font-family:'Roboto Condensed',sans-serif;font-weight:700;
+  font-size:.8rem;color:var(--amber);
+  text-transform:uppercase;letter-spacing:.06em;
+  display:flex;align-items:center;gap:6px;
+}
+.confirm-ring-wrap{
+  display:flex;align-items:center;gap:10px;
+}
+/* SVG countdown ring */
+#confirm-svg{width:36px;height:36px;flex-shrink:0}
+#confirm-ring-bg{stroke:var(--border)}
+#confirm-ring{
+  stroke:var(--amber);
+  stroke-linecap:round;
+  transform-origin:center;
+  transform:rotate(-90deg);
+  transition:stroke-dashoffset .05s linear;
+}
+#confirm-seconds{
+  font-family:'Roboto Condensed',sans-serif;font-weight:900;
+  font-size:2rem;color:var(--amber);line-height:1;
+  min-width:1.5ch;
+}
+.confirm-hint{font-size:.75rem;color:var(--muted);line-height:1.4;flex:1}
+
+/* ═══════════════════════════════════════════════════════════════
+   PHOTO TAB
+═══════════════════════════════════════════════════════════════ */
+.photo-layout{
+  display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;
+}
 @media(max-width:640px){.photo-layout{grid-template-columns:1fr}}
 
 #drop-zone{
   border:3px dashed var(--border);border-radius:12px;
-  background:var(--card);padding:40px 20px;text-align:center;
+  background:var(--card);padding:36px 16px;text-align:center;
   cursor:pointer;transition:border-color .2s,background .2s;
 }
 #drop-zone:hover,#drop-zone.over{border-color:var(--green);background:#141f0d}
-#drop-zone .dz-ico{font-size:3rem;margin-bottom:8px}
+#drop-zone .dz-ico{font-size:2.8rem;margin-bottom:8px}
 #drop-zone .dz-t{
   font-family:'Roboto Condensed',sans-serif;font-weight:700;
-  font-size:1.1rem;color:var(--text);
+  font-size:1.05rem;color:var(--text);
 }
-#drop-zone .dz-s{font-size:.82rem;color:var(--muted);margin-top:4px}
+#drop-zone .dz-s{font-size:.8rem;color:var(--muted);margin-top:4px}
 #photo-file{display:none}
 
 .ph-canvas-wrap{
@@ -277,24 +430,30 @@ main{flex:1;max-width:1100px;margin:0 auto;padding:16px 12px 48px;width:100%}
   border-radius:50%;animation:spin .7s linear infinite;
 }
 @keyframes spin{to{transform:rotate(360deg)}}
-.spinner-lbl{
-  font-family:'Roboto Condensed',sans-serif;font-size:.95rem;color:var(--muted);
-}
+.spinner-lbl{font-family:'Roboto Condensed',sans-serif;font-size:.95rem;color:var(--muted)}
 
-/* photo counter (same style, compact) */
 .ph-counter{
   background:var(--card);border:1px solid var(--border);
   border-radius:12px;overflow:hidden;
   position:sticky;top:12px;
 }
+@media(max-width:640px){
+  .ph-counter{position:static}
+}
 
-/* ── BUTTONS ────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════
+   BUTTONS  (all ≥48px touch targets)
+═══════════════════════════════════════════════════════════════ */
 .btn{
   display:inline-flex;align-items:center;gap:6px;
   border:none;border-radius:50px;
   font-family:'Roboto Condensed',sans-serif;font-weight:700;
-  font-size:.95rem;cursor:pointer;padding:12px 22px;
+  font-size:.95rem;cursor:pointer;
+  padding:0 22px;
+  min-height:var(--btn-min);
   transition:transform .15s,box-shadow .15s,filter .2s;
+  touch-action:manipulation;
+  white-space:nowrap;
 }
 .btn:hover{transform:translateY(-2px);box-shadow:0 5px 18px rgba(0,0,0,.4)}
 .btn:active{transform:translateY(0)}
@@ -304,19 +463,10 @@ main{flex:1;max-width:1100px;margin:0 auto;padding:16px 12px 48px;width:100%}
 .ba{background:var(--amber);color:#1a0a00}
 .bo{background:transparent;border:2px solid var(--border);color:var(--text)}
 .bo:hover{border-color:var(--green);color:var(--green)}
-.btn-sm{padding:8px 16px;font-size:.82rem}
-
-/* ── TIPS ───────────────────────────────────────────────────── */
-.tip{
-  background:var(--card);border-left:3px solid var(--amber);
-  border-radius:0 8px 8px 0;padding:10px 14px;
-  font-size:.82rem;line-height:1.5;color:var(--muted);
-  margin-bottom:14px;
-}
-.tip strong{color:var(--text)}
+.btn-sm{padding:0 16px;font-size:.82rem;min-height:40px}
 
 footer{
-  text-align:center;padding:16px;font-size:.72rem;color:var(--muted);
+  text-align:center;padding:14px 16px;font-size:.7rem;color:var(--muted);
   border-top:1px solid var(--border);
 }
 </style>
@@ -325,31 +475,24 @@ footer{
 
 <!-- ═══════════════════════════════════════════════════════════
      LOADING SCREEN
-═══════════════════════════════════════════════════════════ -->
+═══════════════════════════════════════════════════════════════ -->
 <div id="loading-screen">
   <div class="load-logo">🌾</div>
-  <div class="load-title">AI Счётчик животных</div>
+  <div class="load-title">AI Счётчик животных v3</div>
   <div class="load-sub">Загрузка ИИ-модели — подождите…</div>
-
-  <div class="progress-outer">
-    <div class="progress-inner" id="prog-bar"></div>
-  </div>
+  <div class="progress-outer"><div class="progress-inner" id="prog-bar"></div></div>
   <div id="load-pct">0%</div>
   <div id="load-stage">Инициализация…</div>
-
   <div id="load-err">
-    <div id="load-err-text">Не удалось загрузить модель.</div>
-    <br/>
-    <button class="btn-retry" onclick="retryLoad()">🔄 Повторить загрузку</button>
-    <br/><br/>
-    <div style="font-size:.78rem;color:#b06040">Проверьте интернет-соединение.<br>
-    Можно также обновить страницу (F5).</div>
+    <div id="load-err-text">Не удалось загрузить модель.</div><br/>
+    <button class="btn-retry" onclick="retryLoad()">🔄 Повторить загрузку</button><br/><br/>
+    <div style="font-size:.76rem;color:#b06040">Проверьте интернет-соединение.<br>Обновите страницу (F5).</div>
   </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
      APP
-═══════════════════════════════════════════════════════════ -->
+═══════════════════════════════════════════════════════════════ -->
 <div id="app">
 <header>
   <div class="hdr-top">
@@ -367,21 +510,21 @@ footer{
 
 <main>
 
-<!-- ── CAM PANEL ─────────────────────────────────────────────── -->
+<!-- ── CAM PANEL ──────────────────────────────────────────── -->
 <div class="panel active" id="panel-cam">
   <div class="tip">
     <strong>💡 Совет:</strong> снимайте при хорошем освещении, животные должны быть видны целиком.
-    Держите телефон горизонтально для лучшего охвата.
+    На телефоне держите горизонтально.
   </div>
 
   <div class="cam-grid">
     <!-- LEFT: video -->
     <div class="cam-video-col">
-      <div class="media-wrap" id="cam-wrap">
+      <div class="media-wrap" id="cam-wrap" style="display:none">
         <video id="cam-video" autoplay muted playsinline></video>
         <canvas id="cam-overlay"></canvas>
       </div>
-      <div class="cam-no-signal" id="cam-nosignal">
+      <div class="cam-no-signal visible" id="cam-nosignal">
         <div class="ns-icon">📷</div>
         <div>Камера не включена</div>
         <div style="font-size:.75rem;margin-top:4px">Нажмите «Включить камеру»</div>
@@ -389,18 +532,35 @@ footer{
       <div class="cam-controls">
         <button class="btn bg" id="btn-start" onclick="startCamera()">▶ Включить камеру</button>
         <button class="btn br" id="btn-stop"  onclick="stopCamera()" style="display:none">■ Выключить</button>
-        <button class="btn bo btn-sm" id="btn-snap" onclick="snapPhoto()" style="display:none" title="Сделать снимок">📸 Снимок</button>
+        <button class="btn bo btn-sm" id="btn-snap" onclick="snapPhoto()" style="display:none">📸 Снимок</button>
       </div>
       <div class="alert-strip ae" id="cam-err"></div>
       <div class="alert-strip aw" id="cam-warn"></div>
     </div>
 
-    <!-- RIGHT: counter -->
-    <div class="cam-counter-col">
+    <!-- RIGHT/BOTTOM: live counter -->
+    <div class="cam-counter-col" id="cam-counter-col">
+
+      <!-- 3-sec confirmation bar (hidden until detection) -->
+      <div id="confirm-bar">
+        <div class="confirm-label">⏱ Проверка… подтверждение через</div>
+        <div class="confirm-ring-wrap">
+          <!-- SVG countdown ring (r=14, circumference≈87.96) -->
+          <svg id="confirm-svg" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle id="confirm-ring-bg" cx="18" cy="18" r="14" stroke-width="3.5" fill="none"/>
+            <circle id="confirm-ring"    cx="18" cy="18" r="14" stroke-width="3.5" fill="none"
+              stroke-dasharray="87.96" stroke-dashoffset="0"/>
+          </svg>
+          <div id="confirm-seconds">3</div>
+          <div class="confirm-hint">Сверьте рамки ИИ<br>с реальными животными</div>
+        </div>
+      </div>
+
       <div class="counter-header">
         <div class="live-dot" id="live-dot"></div>
-        СЧЁТЧИК В РЕАЛЬНОМ ВРЕМЕНИ
+        <span id="counter-hdr-label">СЧЁТЧИК В РЕАЛЬНОМ ВРЕМЕНИ</span>
       </div>
+
       <div class="counter-rows">
         <div class="cnt-row" id="cam-row-cow">
           <div class="cnt-icon">🐄</div>
@@ -418,20 +578,22 @@ footer{
           <div class="cnt-num" id="cam-n-horse">0</div>
         </div>
       </div>
+
       <div class="counter-total">
         <div class="total-label">ИТОГО</div>
         <div class="total-num" id="cam-total">0</div>
       </div>
       <div class="fps-row">
-        FPS: <span id="fps-val">—</span> &nbsp;|&nbsp;
-        Кадров обработано: <span id="frames-val">0</span> &nbsp;|&nbsp;
+        FPS: <span id="fps-val">—</span>&nbsp;|&nbsp;
+        Кадров: <span id="frames-val">0</span>&nbsp;|&nbsp;
+        Трекер: <span id="track-val">0</span>&nbsp;|&nbsp;
         Порог: <span>40%</span>
       </div>
-    </div>
+    </div><!-- /cam-counter-col -->
   </div>
-</div>
+</div><!-- /panel-cam -->
 
-<!-- ── PHOTO PANEL ────────────────────────────────────────────── -->
+<!-- ── PHOTO PANEL ────────────────────────────────────────── -->
 <div class="panel" id="panel-ph">
   <div class="tip">
     <strong>💡 Совет:</strong> снимайте сбоку или сверху при дневном свете.
@@ -439,7 +601,7 @@ footer{
   </div>
 
   <div class="photo-layout">
-    <!-- left -->
+    <!-- left: drop + canvas -->
     <div>
       <div id="drop-zone"
            onclick="document.getElementById('photo-file').click()"
@@ -474,7 +636,7 @@ footer{
       <div class="alert-strip ae" id="ph-err"></div>
     </div>
 
-    <!-- right: counter -->
+    <!-- right: photo counter -->
     <div class="ph-counter">
       <div class="counter-header">
         <div class="live-dot"></div>
@@ -503,26 +665,20 @@ footer{
       </div>
     </div>
   </div>
-</div>
+</div><!-- /panel-ph -->
 
 </main>
-<footer>Все вычисления локальны · Фото не передаются · TensorFlow.js + COCO-SSD · GitHub Pages</footer>
+<footer>Все вычисления локальны · Фото не передаются · TensorFlow.js + COCO-SSD · v3</footer>
 </div><!-- /app -->
 
 <!-- ═══════════════════════════════════════════════════════════
      SCRIPTS
-═══════════════════════════════════════════════════════════ -->
-<!-- TF.js -->
-<script>
-window._tfReady = false;
-window._cocoReady = false;
-</script>
+═══════════════════════════════════════════════════════════════ -->
+<script>window._tfReady=false;window._cocoReady=false;</script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"
-        onload="window._tfReady=true"
-        onerror="loadTFFallback()"></script>
+        onload="window._tfReady=true" onerror="loadTFFallback()"></script>
 <script>
 function loadTFFallback(){
-  setStage('TensorFlow.js: резервный CDN…');
   var s=document.createElement('script');
   s.src='https://unpkg.com/@tensorflow/tfjs@4.17.0/dist/tf.min.js';
   s.onload=function(){window._tfReady=true};
@@ -530,11 +686,9 @@ function loadTFFallback(){
 }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"
-        onload="window._cocoReady=true"
-        onerror="loadCocoFallback()"></script>
+        onload="window._cocoReady=true" onerror="loadCocoFallback()"></script>
 <script>
 function loadCocoFallback(){
-  setStage('COCO-SSD: резервный CDN…');
   var s=document.createElement('script');
   s.src='https://unpkg.com/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js';
   s.onload=function(){window._cocoReady=true};
@@ -546,24 +700,29 @@ function loadCocoFallback(){
 /* ═══════════════════════════════════════════════════════════════
    CONSTANTS
 ═══════════════════════════════════════════════════════════════ */
-const ANIMALS   = ['cow','sheep','horse'];
-const LABELS    = {cow:'Коровы',sheep:'Овцы',horse:'Лошади'};
-const BOX_CLR   = {cow:'#cc4422',sheep:'#4aa8cc',horse:'#d4920c'};
-const THRESHOLD = 0.40;   // lower = more detections
-const HISTORY   = 3;      // frames to average
-const IOU_THR   = 0.45;   // NMS IoU threshold
-const DETECT_MS = 500;    // interval between detections
+const ANIMALS     = ['cow','sheep','horse'];
+const LABELS      = {cow:'Коровы', sheep:'Овцы', horse:'Лошади'};
+const BOX_CLR     = {cow:'#cc4422', sheep:'#4aa8cc', horse:'#d4920c'};
+
+const THRESHOLD   = 0.40;   // min confidence
+const IOU_NMS     = 0.55;   // NMS: same class suppression
+const IOU_SMALL   = 0.30;   // lower NMS threshold for small boxes (preserves calves)
+const SMALL_RATIO = 0.35;   // box area < 35% of overlapping box → "small animal" → keep
+const DETECT_MS   = 500;    // ms between detections
+const HISTORY     = 3;      // frames for rolling average
+const TRACK_IOU   = 0.30;   // IoU to match tracked object across frames
+const CONFIRM_SEC = 3;      // seconds before final count is "confirmed"
+const CIRC        = 87.96;  // SVG ring circumference (r=14)
 
 /* ═══════════════════════════════════════════════════════════════
-   PROGRESS BAR
+   PROGRESS BAR HELPERS
 ═══════════════════════════════════════════════════════════════ */
-function setProgress(pct){
+const setProgress = pct => {
   document.getElementById('prog-bar').style.width = pct+'%';
   document.getElementById('load-pct').textContent = Math.round(pct)+'%';
-}
-function setStage(txt){
-  document.getElementById('load-stage').textContent = txt;
-}
+};
+const setStage = txt => document.getElementById('load-stage').textContent = txt;
+const sleep    = ms  => new Promise(r => setTimeout(r, ms));
 
 /* ═══════════════════════════════════════════════════════════════
    MODEL LOADING
@@ -571,142 +730,115 @@ function setStage(txt){
 let model = null;
 
 async function waitLibs(){
-  setStage('Загрузка TensorFlow.js…');
-  let tries=0;
-  while(!(window._tfReady && window._cocoReady)){
-    await sleep(300); tries++;
-    if(tries>60) throw new Error('Библиотеки не загрузились за 18 секунд');
-    setProgress(Math.min(tries*1.2,18));
+  setStage('Загрузка TensorFlow.js и COCO-SSD…');
+  for(let i=0; i<70; i++){
+    if(window._tfReady && window._cocoReady) return;
+    await sleep(300);
+    setProgress(Math.min(i*0.9, 18));
   }
+  throw new Error('Библиотеки не загрузились за 21 секунду');
 }
 
-async function initModel(retry){
+async function initModel(){
   const errEl = document.getElementById('load-err');
   errEl.classList.remove('visible');
   setProgress(0); setStage('Инициализация…');
 
-  // timeout warning
-  const warnTimer = setTimeout(()=>{
-    setStage('⚠️ Загрузка занимает более 10 сек. Проверьте интернет…');
-  }, 10000);
+  const warnTimer = setTimeout(()=>
+    setStage('⚠️ Загрузка занимает >10 сек. Проверьте интернет…'), 10000);
 
   try{
     await waitLibs();
-    setProgress(20); setStage('Загрузка TensorFlow.js — ✓');
-    await sleep(200);
+    setProgress(20); setStage('TensorFlow.js загружен ✓'); await sleep(150);
 
     setStage('Инициализация WebGL-бэкенда…');
     await tf.setBackend('webgl');
     await tf.ready();
-    setProgress(35); setStage('WebGL готов ✓');
-    await sleep(150);
+    setProgress(35); setStage('WebGL готов ✓'); await sleep(120);
 
     setStage('Загрузка весов COCO-SSD MobileNet v2…');
-    // Emulate smooth progress while loading weights (they load async internally)
     let fakePct = 35;
-    const fakeInterval = setInterval(()=>{
-      if(fakePct < 88){ fakePct += (88-fakePct)*0.06 + 0.3; setProgress(fakePct); }
+    const fakeTimer = setInterval(()=>{
+      if(fakePct < 88){ fakePct += (88-fakePct)*0.06+0.3; setProgress(fakePct); }
     }, 200);
-
     model = await cocoSsd.load({base:'mobilenet_v2'});
-    clearInterval(fakeInterval);
-    setProgress(92); setStage('Веса модели загружены ✓');
-    await sleep(150);
+    clearInterval(fakeTimer);
+    setProgress(92); setStage('Веса загружены ✓'); await sleep(120);
 
-    // Warm-up pass to pre-compile shaders (use a tiny canvas — COCO-SSD needs HTMLCanvasElement)
-    setStage('Прогрев GPU-шейдеров…');
-    const warmupCanvas = document.createElement('canvas');
-    warmupCanvas.width = 64; warmupCanvas.height = 64;
-    warmupCanvas.getContext('2d').fillRect(0, 0, 64, 64);
-    await model.detect(warmupCanvas);
-    setProgress(100); setStage('Модель готова ✓');
-    await sleep(400);
+    setStage('Прогрев GPU…');
+    const wc = document.createElement('canvas');
+    wc.width=64; wc.height=64;
+    wc.getContext('2d').fillRect(0,0,64,64);
+    await model.detect(wc);
+    setProgress(100); setStage('Модель готова ✓'); await sleep(350);
 
     clearTimeout(warnTimer);
     showApp();
-
   }catch(e){
     clearTimeout(warnTimer);
-    console.error('Model load error:', e);
-    setProgress(0);
-    setStage('Ошибка загрузки');
-    document.getElementById('load-err-text').textContent = 'Ошибка: ' + e.message;
+    console.error(e);
+    setProgress(0); setStage('Ошибка загрузки');
+    document.getElementById('load-err-text').textContent = 'Ошибка: '+e.message;
     errEl.classList.add('visible');
   }
 }
-
-function retryLoad(){ initModel(true); }
+function retryLoad(){ initModel(); }
 
 function showApp(){
   const ls = document.getElementById('loading-screen');
   ls.classList.add('fade-out');
-  setTimeout(()=>{ ls.style.display='none'; }, 520);
-  const app = document.getElementById('app');
-  app.classList.add('visible');
-  // Show no-signal state
-  document.getElementById('cam-nosignal').classList.add('visible');
-  document.getElementById('cam-wrap').style.display='none';
+  setTimeout(()=>ls.style.display='none', 520);
+  document.getElementById('app').classList.add('visible');
 }
 
 /* ═══════════════════════════════════════════════════════════════
    IMAGE ENHANCEMENT
 ═══════════════════════════════════════════════════════════════ */
-/**
- * enhanceImage(srcCanvas) → returns new canvas with:
- *   1. Contrast stretch (global histogram)
- *   2. Sharpen kernel [[0,-1,0],[-1,5,-1],[0,-1,0]]
- *   3. Scaled to INPUT_W×INPUT_H
- */
 function enhanceImage(srcCanvas){
-  const W = srcCanvas.width, H = srcCanvas.height;
+  const W=srcCanvas.width, H=srcCanvas.height;
+  const work=document.createElement('canvas');
+  work.width=W; work.height=H;
+  const wc=work.getContext('2d');
+  wc.drawImage(srcCanvas,0,0);
 
-  // Step 1: copy source at original size
-  const work = document.createElement('canvas');
-  work.width = W; work.height = H;
-  const wc = work.getContext('2d');
-  wc.drawImage(srcCanvas, 0, 0);
-
-  // Step 2: Contrast stretch per channel (global histogram)
-  const id = wc.getImageData(0, 0, W, H);
-  const d  = id.data;
-  const min = [255,255,255], max = [0,0,0];
+  // Contrast stretch per channel
+  const id=wc.getImageData(0,0,W,H), d=id.data;
+  const mn=[255,255,255], mx=[0,0,0];
   for(let i=0;i<d.length;i+=4){
     for(let c=0;c<3;c++){
-      if(d[i+c]<min[c]) min[c]=d[i+c];
-      if(d[i+c]>max[c]) max[c]=d[i+c];
+      if(d[i+c]<mn[c]) mn[c]=d[i+c];
+      if(d[i+c]>mx[c]) mx[c]=d[i+c];
     }
   }
   for(let i=0;i<d.length;i+=4){
     for(let c=0;c<3;c++){
-      const rng=max[c]-min[c]||1;
-      d[i+c]=Math.round((d[i+c]-min[c])/rng*255);
+      const r=mx[c]-mn[c]||1;
+      d[i+c]=Math.round((d[i+c]-mn[c])/r*255);
     }
   }
   wc.putImageData(id,0,0);
 
-  // Step 3: Unsharp mask (blur-diff) — contrast+saturate via CSS filter
-  const out = document.createElement('canvas');
-  out.width = W; out.height = H;
-  const oc = out.getContext('2d');
-  oc.filter = 'contrast(1.15) saturate(1.1)';
-  oc.drawImage(work, 0, 0);
-  oc.filter = 'none';
+  // Unsharp mask
+  const out=document.createElement('canvas');
+  out.width=W; out.height=H;
+  const oc=out.getContext('2d');
+  oc.filter='contrast(1.15) saturate(1.1)';
+  oc.drawImage(work,0,0);
+  oc.filter='none';
 
-  const blur = document.createElement('canvas');
-  blur.width = W; blur.height = H;
-  const bc = blur.getContext('2d');
-  bc.filter = 'blur(1px)';
-  bc.drawImage(out, 0, 0);
-  bc.filter = 'none';
+  const bl=document.createElement('canvas');
+  bl.width=W; bl.height=H;
+  const bc=bl.getContext('2d');
+  bc.filter='blur(1px)';
+  bc.drawImage(out,0,0);
+  bc.filter='none';
 
-  const orig = oc.getImageData(0,0,W,H).data;
-  const blrd = bc.getImageData(0,0,W,H).data;
-  const res  = oc.getImageData(0,0,W,H);
-  const rd   = res.data;
-  const AMOUNT = 1.3;
+  const orig=oc.getImageData(0,0,W,H).data;
+  const blrd=bc.getImageData(0,0,W,H).data;
+  const res=oc.getImageData(0,0,W,H); const rd=res.data;
   for(let i=0;i<orig.length;i+=4){
     for(let c=0;c<3;c++){
-      rd[i+c]=Math.min(255,Math.max(0,Math.round(orig[i+c]+AMOUNT*(orig[i+c]-blrd[i+c]))));
+      rd[i+c]=Math.min(255,Math.max(0,Math.round(orig[i+c]+1.3*(orig[i+c]-blrd[i+c]))));
     }
   }
   oc.putImageData(res,0,0);
@@ -714,37 +846,120 @@ function enhanceImage(srcCanvas){
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   NON-MAXIMUM SUPPRESSION
+   GEOMETRY HELPERS
 ═══════════════════════════════════════════════════════════════ */
-function iou(a,b){
-  const [ax,ay,aw,ah]=a.bbox, [bx,by,bw,bh]=b.bbox;
+function bboxArea(b){ return b[2]*b[3]; }
+
+function bboxIou(a,b){
+  const [ax,ay,aw,ah]=a, [bx,by,bw,bh]=b;
   const ix=Math.max(ax,bx), iy=Math.max(ay,by);
   const ix2=Math.min(ax+aw,bx+bw), iy2=Math.min(ay+ah,by+bh);
   const inter=Math.max(0,ix2-ix)*Math.max(0,iy2-iy);
+  if(inter===0) return 0;
   return inter/(aw*ah+bw*bh-inter);
 }
-function nms(preds, iouThr){
-  const sorted = [...preds].sort((a,b)=>b.score-a.score);
-  const keep = [];
-  const used = new Set();
+
+function centerOf(bbox){ return [bbox[0]+bbox[2]/2, bbox[1]+bbox[3]/2]; }
+
+/* ═══════════════════════════════════════════════════════════════
+   ADAPTIVE NMS  — preserves small objects (calves behind cows)
+   Rules:
+   1. Same class + IoU > IOU_NMS  → suppress lower-score
+   2. Different classes + IoU > 0  → KEEP BOTH (cow + calf scenario)
+   3. Same class + IoU > IOU_SMALL, smaller box area < SMALL_RATIO → KEEP BOTH
+═══════════════════════════════════════════════════════════════ */
+function adaptiveNms(preds){
+  const sorted=[...preds].sort((a,b)=>b.score-a.score);
+  const suppressed=new Set();
+
   for(let i=0;i<sorted.length;i++){
-    if(used.has(i)) continue;
-    keep.push(sorted[i]);
+    if(suppressed.has(i)) continue;
     for(let j=i+1;j<sorted.length;j++){
-      if(!used.has(j) && sorted[i].class===sorted[j].class && iou(sorted[i],sorted[j])>iouThr)
-        used.add(j);
+      if(suppressed.has(j)) continue;
+      const iou=bboxIou(sorted[i].bbox, sorted[j].bbox);
+      if(iou===0) continue;
+
+      if(sorted[i].class !== sorted[j].class){
+        // Different classes: ALWAYS keep both (cow + calf/sheep nearby)
+        continue;
+      }
+
+      // Same class
+      const areaI=bboxArea(sorted[i].bbox);
+      const areaJ=bboxArea(sorted[j].bbox);
+      const smallerArea=Math.min(areaI,areaJ);
+      const largerArea =Math.max(areaI,areaJ);
+      const sizeRatio  =smallerArea/largerArea;
+
+      if(iou > IOU_NMS){
+        // High overlap, similar size → true duplicate → suppress j
+        if(sizeRatio >= SMALL_RATIO){
+          suppressed.add(j);
+        }
+        // Small box hidden behind large one (e.g. calf) → keep both
+        // (sizeRatio < SMALL_RATIO → fall through, j is kept)
+      }
+      // Low-medium overlap → keep both regardless
     }
   }
-  return keep;
+  return sorted.filter((_,i)=>!suppressed.has(i));
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   IoU TRACKER
+   Matches detections across frames by IoU to avoid "jump" counting.
+   Assigns a stable ID to each tracked animal; if the same animal
+   stays in frame, its count contribution is stable.
+═══════════════════════════════════════════════════════════════ */
+let trackedObjects = [];  // [{id, class, bbox, score, age, lost}]
+let nextTrackId    = 1;
+
+function updateTracker(detections){
+  // Age up existing tracks
+  trackedObjects.forEach(t=>{ t.age++; t.matched=false; });
+
+  // Match detections → existing tracks by IoU
+  const unmatched=[];
+  for(const det of detections){
+    let bestIdx=-1, bestIou=TRACK_IOU;
+    for(let i=0;i<trackedObjects.length;i++){
+      const t=trackedObjects[i];
+      if(t.class!==det.class) continue;
+      const iou=bboxIou(t.bbox, det.bbox);
+      if(iou>bestIou){ bestIou=iou; bestIdx=i; }
+    }
+    if(bestIdx>=0){
+      trackedObjects[bestIdx].bbox  = det.bbox;
+      trackedObjects[bestIdx].score = det.score;
+      trackedObjects[bestIdx].matched=true;
+      trackedObjects[bestIdx].lost  = 0;
+    } else {
+      unmatched.push(det);
+    }
+  }
+
+  // Mark unmatched tracks as lost; remove after 4 frames
+  trackedObjects.forEach(t=>{
+    if(!t.matched){ t.lost=(t.lost||0)+1; }
+  });
+  trackedObjects=trackedObjects.filter(t=>t.lost<4);
+
+  // Add new tracks for unmatched detections
+  for(const d of unmatched){
+    trackedObjects.push({id:nextTrackId++, class:d.class,
+      bbox:d.bbox, score:d.score, age:0, lost:0, matched:true});
+  }
+
+  return trackedObjects.filter(t=>t.lost===0);
 }
 
 /* ═══════════════════════════════════════════════════════════════
    FRAME HISTORY (rolling average of last N frames)
 ═══════════════════════════════════════════════════════════════ */
-const frameHistory = []; // array of {cow,sheep,horse}
-function pushHistory(counts){
-  frameHistory.push({...counts});
-  if(frameHistory.length > HISTORY) frameHistory.shift();
+const frameHistory=[];
+function pushHistory(c){
+  frameHistory.push({...c});
+  if(frameHistory.length>HISTORY) frameHistory.shift();
 }
 function avgHistory(){
   const acc={cow:0,sheep:0,horse:0};
@@ -752,6 +967,83 @@ function avgHistory(){
   const n=frameHistory.length||1;
   ANIMALS.forEach(a=>acc[a]=Math.round(acc[a]/n));
   return acc;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   3-SECOND CONFIRMATION SYSTEM
+═══════════════════════════════════════════════════════════════ */
+let confirmTimer   = null;   // setInterval handle
+let confirmStart   = 0;      // timestamp when countdown began
+let pendingCounts  = null;   // counts waiting to be confirmed
+let confirmedCounts= {cow:0,sheep:0,horse:0};
+let countChanged   = false;  // did counts change since last confirmation?
+let isConfirming   = false;
+
+function triggerConfirmation(newCounts){
+  // Check if counts actually changed from confirmed
+  const changed = ANIMALS.some(a=>newCounts[a]!==confirmedCounts[a]);
+  if(!changed && isConfirming) return;  // same as pending, keep timer
+  if(!changed && !isConfirming) return; // no change, nothing to do
+
+  // Reset and start fresh countdown
+  pendingCounts = {...newCounts};
+  startCountdown();
+}
+
+function startCountdown(){
+  if(confirmTimer) clearInterval(confirmTimer);
+  isConfirming=true;
+  confirmStart=performance.now();
+
+  // Show confirm bar
+  document.getElementById('confirm-bar').classList.add('visible');
+  document.getElementById('confirm-seconds').textContent=CONFIRM_SEC;
+  setRing(1.0);
+  document.getElementById('counter-hdr-label').textContent='ОЖИДАНИЕ ПОДТВЕРЖДЕНИЯ…';
+
+  confirmTimer=setInterval(()=>{
+    const elapsed=(performance.now()-confirmStart)/1000;
+    const remaining=Math.max(0, CONFIRM_SEC-elapsed);
+    const frac=remaining/CONFIRM_SEC;
+
+    document.getElementById('confirm-seconds').textContent=Math.ceil(remaining);
+    setRing(frac);
+
+    if(remaining<=0){
+      clearInterval(confirmTimer);
+      confirmTimer=null;
+      isConfirming=false;
+      confirmedCounts={...pendingCounts};
+      applyConfirmedCounts(confirmedCounts);
+      document.getElementById('confirm-bar').classList.remove('visible');
+      document.getElementById('counter-hdr-label').textContent='✅ ПОДТВЕРЖДЕНО';
+      setTimeout(()=>{
+        document.getElementById('counter-hdr-label').textContent='СЧЁТЧИК В РЕАЛЬНОМ ВРЕМЕНИ';
+      },2500);
+    }
+  }, 50);
+}
+
+function setRing(frac){
+  // stroke-dashoffset 0 = full circle, CIRC = empty
+  document.getElementById('confirm-ring').style.strokeDashoffset = (1-frac)*CIRC;
+}
+
+function applyConfirmedCounts(c){
+  let total=0;
+  ANIMALS.forEach(a=>{
+    const n=c[a]||0; total+=n;
+    const el=document.getElementById('cam-n-'+a);
+    el.textContent=n;
+    el.classList.remove('flash');
+    el.classList.add('confirmed');
+    setTimeout(()=>el.classList.remove('confirmed'),700);
+    document.getElementById('cam-row-'+a).classList.toggle('hit',n>0);
+  });
+  const tel=document.getElementById('cam-total');
+  tel.textContent=total;
+  tel.classList.add('confirmed');
+  setTimeout(()=>tel.classList.remove('confirmed'),700);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -763,16 +1055,17 @@ let lastDetectTs=0, fpsFrames=0, fpsTimer=null, totalFrames=0;
 async function startCamera(){
   hideAlert('cam-err'); hideAlert('cam-warn');
   try{
-    camStream = await navigator.mediaDevices.getUserMedia({
+    camStream=await navigator.mediaDevices.getUserMedia({
       video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}},
       audio:false
     });
   }catch(e){
-    showAlert('cam-err','❌ Камера недоступна: '+e.message+'. Разрешите доступ в настройках браузера или загрузите фото.');
+    showAlert('cam-err','❌ Камера недоступна: '+e.message+
+      '. Разрешите доступ в настройках браузера или загрузите фото.');
     return;
   }
-  const v = document.getElementById('cam-video');
-  v.srcObject = camStream;
+  const v=document.getElementById('cam-video');
+  v.srcObject=camStream;
   await v.play();
 
   document.getElementById('cam-nosignal').classList.remove('visible');
@@ -783,10 +1076,11 @@ async function startCamera(){
   document.getElementById('live-dot').classList.add('active');
 
   fpsFrames=0; totalFrames=0;
-  fpsTimer = setInterval(()=>{
-    document.getElementById('fps-val').textContent=fpsFrames;
-    fpsFrames=0;
-  },1000);
+  fpsTimer=setInterval(()=>{ document.getElementById('fps-val').textContent=fpsFrames; fpsFrames=0; },1000);
+
+  // Reset tracker and history
+  trackedObjects=[]; frameHistory.length=0;
+  confirmedCounts={cow:0,sheep:0,horse:0};
 
   camLoop();
 }
@@ -794,6 +1088,8 @@ async function startCamera(){
 function stopCamera(){
   if(camRafId){cancelAnimationFrame(camRafId);camRafId=null}
   clearInterval(fpsTimer);
+  if(confirmTimer){clearInterval(confirmTimer);confirmTimer=null}
+  isConfirming=false;
   if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null}
   const v=document.getElementById('cam-video');
   v.srcObject=null;
@@ -803,9 +1099,11 @@ function stopCamera(){
   document.getElementById('btn-stop').style.display='none';
   document.getElementById('btn-snap').style.display='none';
   document.getElementById('live-dot').classList.remove('active');
-  setCamCounts({cow:0,sheep:0,horse:0});
+  document.getElementById('confirm-bar').classList.remove('visible');
+  document.getElementById('counter-hdr-label').textContent='СЧЁТЧИК В РЕАЛЬНОМ ВРЕМЕНИ';
+  setCamDisplay({cow:0,sheep:0,horse:0}, false);
   hideAlert('cam-warn');
-  frameHistory.length=0;
+  trackedObjects=[]; frameHistory.length=0;
 }
 
 function syncOverlay(){
@@ -815,56 +1113,78 @@ function syncOverlay(){
 }
 
 async function camLoop(){
-  const video   = document.getElementById('cam-video');
-  const overlay = document.getElementById('cam-overlay');
-  const octx    = overlay.getContext('2d');
+  const video  =document.getElementById('cam-video');
+  const overlay=document.getElementById('cam-overlay');
+  const octx   =overlay.getContext('2d');
 
   async function frame(ts){
-    camRafId = requestAnimationFrame(frame);
+    camRafId=requestAnimationFrame(frame);
     fpsFrames++;
 
-    if(overlay.width !== video.videoWidth && video.videoWidth) syncOverlay();
-    if(ts - lastDetectTs < DETECT_MS) return;
-    if(!model || video.readyState < 2) return;
-    lastDetectTs = ts;
+    if(overlay.width!==video.videoWidth && video.videoWidth) syncOverlay();
+    if(ts-lastDetectTs<DETECT_MS) return;
+    if(!model||video.readyState<2) return;
+    lastDetectTs=ts;
     totalFrames++;
     document.getElementById('frames-val').textContent=totalFrames;
 
-    // Grab current video frame to a canvas
+    // Grab frame
     const vw=video.videoWidth||640, vh=video.videoHeight||480;
-    const grab = document.createElement('canvas');
+    const grab=document.createElement('canvas');
     grab.width=vw; grab.height=vh;
     grab.getContext('2d').drawImage(video,0,0);
 
-    // Enhance → detect
-    const enhanced = enhanceImage(grab);
+    const enhanced=enhanceImage(grab);
     let preds;
-    try{ preds = await model.detect(enhanced); }
+    try{ preds=await model.detect(enhanced); }
     catch(e){ return; }
 
-    // Filter animals + NMS
-    const animals = nms(
-      preds.filter(p=>ANIMALS.includes(p.class) && p.score>=THRESHOLD),
-      IOU_THR
-    );
+    // Filter → adaptive NMS → tracker
+    const filtered=preds.filter(p=>ANIMALS.includes(p.class)&&p.score>=THRESHOLD);
+    const afterNms=adaptiveNms(filtered);
+    const tracked =updateTracker(afterNms);
+    document.getElementById('track-val').textContent=tracked.length;
 
-    // Count + history
+    // Count per class from tracker
     const raw={cow:0,sheep:0,horse:0};
-    animals.forEach(p=>raw[p.class]++);
+    tracked.forEach(t=>raw[t.class]=(raw[t.class]||0)+1);
+
+    // Rolling average (smooths single-frame glitches)
     pushHistory(raw);
-    const avg = avgHistory();
-    setCamCounts(avg);
+    const avg=avgHistory();
 
-    // Draw boxes — scale overlay coords relative to enhanced canvas size
+    // Show live (un-confirmed) numbers in counter
+    setCamDisplay(avg, false);
+
+    // Trigger 3-sec confirmation if counts changed
+    triggerConfirmation(avg);
+
+    // Draw boxes from tracker
     octx.clearRect(0,0,overlay.width,overlay.height);
-    const sx = overlay.width/enhanced.width, sy = overlay.height/enhanced.height;
-    animals.forEach(p=>drawBox(octx,p,sx,sy,overlay));
+    const sx=overlay.width/enhanced.width, sy=overlay.height/enhanced.height;
+    tracked.forEach(t=>{
+      // Build pred-like object for drawBox
+      drawBox(octx,{bbox:t.bbox,class:t.class,score:t.score,trackId:t.id},sx,sy,overlay);
+    });
 
-    const total = avg.cow+avg.sheep+avg.horse;
+    const total=avg.cow+avg.sheep+avg.horse;
     if(total===0) showAlert('cam-warn','Животные не обнаружены в кадре');
     else hideAlert('cam-warn');
   }
-  camRafId = requestAnimationFrame(frame);
+  camRafId=requestAnimationFrame(frame);
+}
+
+function setCamDisplay(c, flash){
+  let total=0;
+  ANIMALS.forEach(a=>{
+    const n=c[a]||0; total+=n;
+    const el=document.getElementById('cam-n-'+a);
+    const old=parseInt(el.textContent)||0;
+    el.textContent=n;
+    if(flash&&n!==old){ el.classList.add('flash'); setTimeout(()=>el.classList.remove('flash'),300); }
+    document.getElementById('cam-row-'+a).classList.toggle('hit',n>0);
+  });
+  document.getElementById('cam-total').textContent=total;
 }
 
 function snapPhoto(){
@@ -872,23 +1192,7 @@ function snapPhoto(){
   const c=document.createElement('canvas');
   c.width=v.videoWidth; c.height=v.videoHeight;
   c.getContext('2d').drawImage(v,0,0);
-  c.toBlob(blob=>{
-    switchTab('ph');
-    setTimeout(()=>processPhoto(blob),100);
-  },'image/jpeg',0.95);
-}
-
-function setCamCounts(c){
-  let total=0;
-  ANIMALS.forEach(a=>{
-    const n=c[a]||0; total+=n;
-    const el=document.getElementById('cam-n-'+a);
-    const old=parseInt(el.textContent)||0;
-    el.textContent=n;
-    if(n!==old){ el.classList.add('flash'); setTimeout(()=>el.classList.remove('flash'),300); }
-    document.getElementById('cam-row-'+a).classList.toggle('hit',n>0);
-  });
-  document.getElementById('cam-total').textContent=total;
+  c.toBlob(blob=>{ switchTab('ph'); setTimeout(()=>processPhoto(blob),100); },'image/jpeg',0.95);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -930,20 +1234,16 @@ async function processPhoto(file){
       return;
     }
 
-    const animals = nms(
-      preds.filter(p=>ANIMALS.includes(p.class) && p.score>=THRESHOLD),
-      IOU_THR
-    );
+    const filtered=preds.filter(p=>ANIMALS.includes(p.class)&&p.score>=THRESHOLD);
+    const animals =adaptiveNms(filtered);
+
     const counts={cow:0,sheep:0,horse:0};
     animals.forEach(p=>counts[p.class]++);
 
-    // Draw on ORIGINAL size canvas (for display)
-    // enhanced has same dimensions as src (naturalWidth×naturalHeight)
     const out=document.getElementById('photo-canvas');
     out.width=img.naturalWidth; out.height=img.naturalHeight;
     const oc=out.getContext('2d');
-    oc.drawImage(img,0,0); // draw original (not enhanced) for best look
-    // bbox coords from model are relative to enhanced canvas size
+    oc.drawImage(img,0,0);
     const sx=img.naturalWidth/enhanced.width, sy=img.naturalHeight/enhanced.height;
     animals.forEach(p=>drawBox(oc,p,sx,sy,out));
 
@@ -951,7 +1251,7 @@ async function processPhoto(file){
     const total=counts.cow+counts.sheep+counts.horse;
     if(total===0){
       showAlert('ph-warn','⚠️ Животные не обнаружены. Попробуйте фото с лучшим освещением, ближе и без размытия.');
-    } else {
+    }else{
       const parts=[];
       if(counts.cow)   parts.push(`коров: <b>${counts.cow}</b>`);
       if(counts.sheep) parts.push(`овец: <b>${counts.sheep}</b>`);
@@ -968,18 +1268,16 @@ async function processPhoto(file){
     showAlert('ph-err','❌ Не удалось открыть изображение.');
     document.getElementById('btn-reset-ph').style.display='inline-flex';
   };
-  img.src = file instanceof Blob ? URL.createObjectURL(file) : file;
+  img.src=file instanceof Blob ? URL.createObjectURL(file) : file;
 }
 
-function endPhotoSpinner(){
-  document.getElementById('ph-spinner').classList.remove('visible');
-}
+function endPhotoSpinner(){ document.getElementById('ph-spinner').classList.remove('visible'); }
 
 function setPhCounts(c){
   ANIMALS.forEach(a=>{
     const n=c?c[a]:null;
-    document.getElementById('ph-n-'+a).textContent = n===null?'—':n;
-    document.getElementById('ph-row-'+a).classList.toggle('hit', n>0);
+    document.getElementById('ph-n-'+a).textContent=n===null?'—':n;
+    document.getElementById('ph-row-'+a).classList.toggle('hit',n>0);
   });
   const total=c?ANIMALS.reduce((s,a)=>s+c[a],0):null;
   document.getElementById('ph-total').textContent=total===null?'—':total;
@@ -995,24 +1293,26 @@ function resetPhoto(){
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   DRAW BOX
+   DRAW BOX  — shows track ID for camera mode
 ═══════════════════════════════════════════════════════════════ */
-function drawBox(ctx,pred,sx,sy,canvas){
+function drawBox(ctx, pred, sx, sy, canvas){
   const [x,y,w,h]=pred.bbox;
   const rx=x*sx, ry=y*sy, rw=w*sx, rh=h*sy;
   const col=BOX_CLR[pred.class]||'#fff';
-  const lbl=`${LABELS[pred.class]} ${Math.round(pred.score*100)}%`;
-  const sc=Math.max(canvas.width,canvas.height)/700;
-  const lw=Math.max(2,Math.round(2.5*sc));
-  const fs=Math.max(13,Math.round(15*sc));
-  const pad=Math.round(5*sc);
+  const sc =Math.max(canvas.width,canvas.height)/700;
+  const lw =Math.max(2,Math.round(2.5*sc));
+  const fs =Math.max(12,Math.round(14*sc));
+  const pad=Math.round(4*sc);
 
-  // Box
+  const idStr=pred.trackId?` #${pred.trackId}`:'';
+  const lbl=`${LABELS[pred.class]} ${Math.round(pred.score*100)}%${idStr}`;
+
+  // Rectangle
   ctx.strokeStyle=col; ctx.lineWidth=lw;
   ctx.strokeRect(rx,ry,rw,rh);
 
-  // Corner accents
-  const cs=Math.min(rw,rh)*0.18;
+  // Corner L-brackets
+  const cs=Math.min(rw,rh)*0.16;
   ctx.lineWidth=lw*2;
   [[rx,ry,1,1],[rx+rw,ry,-1,1],[rx,ry+rh,1,-1],[rx+rw,ry+rh,-1,-1]].forEach(([cx,cy,dx,dy])=>{
     ctx.beginPath(); ctx.strokeStyle=col;
@@ -1021,14 +1321,14 @@ function drawBox(ctx,pred,sx,sy,canvas){
   });
   ctx.lineWidth=lw;
 
-  // Label bg
+  // Label
   ctx.font=`bold ${fs}px 'Roboto Condensed',sans-serif`;
   const tw=ctx.measureText(lbl).width+pad*2;
   const th=fs+pad*2;
   ctx.fillStyle=col;
-  ctx.fillRect(rx,ry-th,tw,th);
+  ctx.fillRect(rx, Math.max(0,ry-th), tw, th);
   ctx.fillStyle='#fff';
-  ctx.fillText(lbl,rx+pad,ry-pad);
+  ctx.fillText(lbl, rx+pad, Math.max(th,ry)-pad);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1041,14 +1341,10 @@ function switchTab(name){
   document.getElementById('tab-'+name+'-btn').classList.add('active');
   if(name!=='cam') stopCamera();
 }
-
 function showAlert(id,html){ const e=document.getElementById(id); e.innerHTML=html; e.classList.add('visible'); }
 function hideAlert(id){ document.getElementById(id).classList.remove('visible'); }
-const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
-/* ═══════════════════════════════════════════════════════════════
-   BOOT
-═══════════════════════════════════════════════════════════════ */
+/* ── BOOT ────────────────────────────────────────────────────── */
 window.addEventListener('DOMContentLoaded', ()=>initModel());
 </script>
 </body>
