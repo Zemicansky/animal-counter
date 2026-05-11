@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
-<title>AI Счётчик животных — Ферма v3</title>
+<title>AI Счётчик животных — Ферма v4</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700;900&family=Roboto:wght@400;500&display=swap" rel="stylesheet"/>
 
@@ -25,7 +25,6 @@
   --sky:#4aa8cc;
   --cow-clr:#cc4422;
   --sheep-clr:#4aa8cc;
-  --horse-clr:#d4920c;
   --btn-min:48px;   /* WCAG touch target */
 }
 
@@ -572,11 +571,6 @@ footer{
           <div class="cnt-label">Овцы</div>
           <div class="cnt-num" id="cam-n-sheep">0</div>
         </div>
-        <div class="cnt-row" id="cam-row-horse">
-          <div class="cnt-icon">🐎</div>
-          <div class="cnt-label">Лошади</div>
-          <div class="cnt-num" id="cam-n-horse">0</div>
-        </div>
       </div>
 
       <div class="counter-total">
@@ -653,11 +647,6 @@ footer{
           <div class="cnt-label">Овцы</div>
           <div class="cnt-num" id="ph-n-sheep">—</div>
         </div>
-        <div class="cnt-row" id="ph-row-horse">
-          <div class="cnt-icon">🐎</div>
-          <div class="cnt-label">Лошади</div>
-          <div class="cnt-num" id="ph-n-horse">—</div>
-        </div>
       </div>
       <div class="counter-total">
         <div class="total-label">ИТОГО</div>
@@ -668,7 +657,7 @@ footer{
 </div><!-- /panel-ph -->
 
 </main>
-<footer>Все вычисления локальны · Фото не передаются · TensorFlow.js + COCO-SSD · v3</footer>
+<footer>Все вычисления локальны · Фото не передаются · TensorFlow.js + COCO-SSD · v4</footer>
 </div><!-- /app -->
 
 <!-- ═══════════════════════════════════════════════════════════
@@ -700,9 +689,9 @@ function loadCocoFallback(){
 /* ═══════════════════════════════════════════════════════════════
    CONSTANTS
 ═══════════════════════════════════════════════════════════════ */
-const ANIMALS     = ['cow','sheep','horse'];
-const LABELS      = {cow:'Коровы', sheep:'Овцы', horse:'Лошади'};
-const BOX_CLR     = {cow:'#cc4422', sheep:'#4aa8cc', horse:'#d4920c'};
+const ANIMALS     = ['cow','sheep'];
+const LABELS      = {cow:'Коровы', sheep:'Овцы'};
+const BOX_CLR     = {cow:'#cc4422', sheep:'#4aa8cc'};
 
 const THRESHOLD   = 0.40;   // min confidence
 const IOU_NMS     = 0.55;   // NMS: same class suppression
@@ -962,7 +951,7 @@ function pushHistory(c){
   if(frameHistory.length>HISTORY) frameHistory.shift();
 }
 function avgHistory(){
-  const acc={cow:0,sheep:0,horse:0};
+  const acc={cow:0,sheep:0};
   frameHistory.forEach(f=>ANIMALS.forEach(a=>acc[a]+=f[a]));
   const n=frameHistory.length||1;
   ANIMALS.forEach(a=>acc[a]=Math.round(acc[a]/n));
@@ -975,7 +964,7 @@ function avgHistory(){
 let confirmTimer   = null;   // setInterval handle
 let confirmStart   = 0;      // timestamp when countdown began
 let pendingCounts  = null;   // counts waiting to be confirmed
-let confirmedCounts= {cow:0,sheep:0,horse:0};
+let confirmedCounts= {cow:0,sheep:0};
 let countChanged   = false;  // did counts change since last confirmation?
 let isConfirming   = false;
 
@@ -1080,7 +1069,7 @@ async function startCamera(){
 
   // Reset tracker and history
   trackedObjects=[]; frameHistory.length=0;
-  confirmedCounts={cow:0,sheep:0,horse:0};
+  confirmedCounts={cow:0,sheep:0};
 
   camLoop();
 }
@@ -1101,7 +1090,7 @@ function stopCamera(){
   document.getElementById('live-dot').classList.remove('active');
   document.getElementById('confirm-bar').classList.remove('visible');
   document.getElementById('counter-hdr-label').textContent='СЧЁТЧИК В РЕАЛЬНОМ ВРЕМЕНИ';
-  setCamDisplay({cow:0,sheep:0,horse:0}, false);
+  setCamDisplay({cow:0,sheep:0}, false);
   hideAlert('cam-warn');
   trackedObjects=[]; frameHistory.length=0;
 }
@@ -1146,7 +1135,7 @@ async function camLoop(){
     document.getElementById('track-val').textContent=tracked.length;
 
     // Count per class from tracker
-    const raw={cow:0,sheep:0,horse:0};
+    const raw={cow:0,sheep:0};
     tracked.forEach(t=>raw[t.class]=(raw[t.class]||0)+1);
 
     // Rolling average (smooths single-frame glitches)
@@ -1167,7 +1156,7 @@ async function camLoop(){
       drawBox(octx,{bbox:t.bbox,class:t.class,score:t.score,trackId:t.id},sx,sy,overlay);
     });
 
-    const total=avg.cow+avg.sheep+avg.horse;
+    const total=avg.cow+avg.sheep;
     if(total===0) showAlert('cam-warn','Животные не обнаружены в кадре');
     else hideAlert('cam-warn');
   }
@@ -1237,7 +1226,7 @@ async function processPhoto(file){
     const filtered=preds.filter(p=>ANIMALS.includes(p.class)&&p.score>=THRESHOLD);
     const animals =adaptiveNms(filtered);
 
-    const counts={cow:0,sheep:0,horse:0};
+    const counts={cow:0,sheep:0};
     animals.forEach(p=>counts[p.class]++);
 
     const out=document.getElementById('photo-canvas');
@@ -1248,14 +1237,13 @@ async function processPhoto(file){
     animals.forEach(p=>drawBox(oc,p,sx,sy,out));
 
     setPhCounts(counts);
-    const total=counts.cow+counts.sheep+counts.horse;
+    const total=counts.cow+counts.sheep;
     if(total===0){
       showAlert('ph-warn','⚠️ Животные не обнаружены. Попробуйте фото с лучшим освещением, ближе и без размытия.');
     }else{
       const parts=[];
       if(counts.cow)   parts.push(`коров: <b>${counts.cow}</b>`);
       if(counts.sheep) parts.push(`овец: <b>${counts.sheep}</b>`);
-      if(counts.horse) parts.push(`лошадей: <b>${counts.horse}</b>`);
       showAlert('ph-ok',`🎉 Найдено: ${parts.join(', ')} — итого <b>${total}</b>`);
     }
 
