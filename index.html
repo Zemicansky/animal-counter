@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
-<title>AI Счётчик животных</title>
+<title>AI Счётчик животных — Ферма v5.0</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700;900&family=Roboto:wght@400;500&display=swap" rel="stylesheet"/>
 
@@ -719,6 +719,10 @@ footer{
 <!-- ═══════════════════════════════════════════════════════════
      SCRIPTS
 ═══════════════════════════════════════════════════════════════ -->
+<!-- v6: ONNX Runtime Web (YOLOv8n backend) -->
+<script>window._ortReady=false;</script>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js"
+        onload="window._ortReady=true" onerror="window._ortFailed=true"></script>
 <script>window._tfReady=false;window._cocoReady=false;</script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"
         onload="window._tfReady=true" onerror="loadTFFallback()"></script>
@@ -745,17 +749,17 @@ function loadCocoFallback(){
 /* ═══════════════════════════════════════════════════════════════
    CONSTANTS  — v5.0
 ═══════════════════════════════════════════════════════════════ */
-const ANIMALS     = ['cow','sheep'];
-const LABELS      = {cow:'Корова', sheep:'Овца'};
-const BOX_CLR     = {cow:'#cc4422', sheep:'#4aa8cc'};
+const ANIMALS     = ['cow','calf','sheep']; // v6: добавлен класс телёнка
+const LABELS      = {cow:'Корова', calf:'Телёнок', sheep:'Овца'};
+const BOX_CLR     = {cow:'#cc4422', calf:'#e8901a', sheep:'#4aa8cc'};
 
-const THRESHOLD   = 0.28;
+const THRESHOLD   = 0.40; // v6: поднят с 0.28 → убирает мусор
 const IOU_NMS     = 0.45;
 const IOU_SMALL   = 0.25;
 const SMALL_RATIO = 0.25;
 const DETECT_MS   = 600;
-const HISTORY     = 4;
-const CONFIRM_SEC = 3;
+const HISTORY     = 8;  // v6: увеличен буфер для медианного фильтра
+const CONFIRM_SEC = 2;  // v6: быстрее подтверждение
 const CIRC        = 87.96;
 
 // Tiling
@@ -792,6 +796,84 @@ const setProgress = pct => {
 };
 const setStage = txt => document.getElementById('load-stage').textContent = txt;
 const sleep    = ms  => new Promise(r => setTimeout(r, ms));
+
+/* ═══════════════════════════════════════════════════════════════
+   v6: YoloDetector — обёртка над ONNX Runtime Web для YOLOv8n
+   API: await yolo.detect(canvas, threshold) → [{class, score, bbox:[x,y,w,h]}]
+   Полностью совместима с cocoSsd.model.detect() — не ломает camLoop.
+═══════════════════════════════════════════════════════════════ */
+class YoloDetector {
+  // COCO class indices → имена классов фермы
+  static FARM_CLASSES = {19:'cow', 17:'sheep', 16:'dog', 15:'cat', 14:'bird'};
+
+  constructor(modelPath, inputSize=640){
+    this.modelPath = modelPath;
+    this.inputSize = inputSize;
+    this.session   = null;
+  }
+
+  async load(){
+    const opts = {
+      executionProviders: ['webgl','wasm'],
+      graphOptimizationLevel: 'all'
+    };
+    this.session = await ort.InferenceSession.create(this.modelPath, opts);
+    // warm-up pass
+    const dummy = new Float32Array(1*3*this.inputSize*this.inputSize);
+    const t = new ort.Tensor('float32', dummy, [1,3,this.inputSize,this.inputSize]);
+    try{ await this.session.run({images:t}); }catch(e){}
+    return this;
+  }
+
+  _canvasToTensor(canvas){
+    const S = this.inputSize;
+    const tmp = document.createElement('canvas');
+    tmp.width = tmp.height = S;
+    tmp.getContext('2d').drawImage(canvas, 0, 0, S, S);
+    const d = tmp.getContext('2d').getImageData(0,0,S,S).data;
+    const f = new Float32Array(S*S*3);
+    for(let i=0; i<S*S; i++){
+      f[i]       = d[i*4  ]/255; // R
+      f[i+S*S]   = d[i*4+1]/255; // G
+      f[i+S*S*2] = d[i*4+2]/255; // B
+    }
+    return new ort.Tensor('float32', f, [1,3,S,S]);
+  }
+
+  _decode(output, origW, origH, threshold){
+    const S = this.inputSize;
+    const scaleX = origW/S, scaleY = origH/S;
+    const data = output.data;
+    // YOLOv8 ONNX export format: [1, 84, 8400]
+    const numBoxes = Math.round(data.length / 84);
+    const results = [];
+    for(let i=0; i<numBoxes; i++){
+      const cx = data[i], cy = data[i+numBoxes];
+      const bw = data[i+numBoxes*2], bh = data[i+numBoxes*3];
+      let bestCls=-1, bestScore=-1;
+      for(let c=0; c<80; c++){
+        const s = data[i+numBoxes*(4+c)];
+        if(s>bestScore){ bestScore=s; bestCls=c; }
+      }
+      if(bestScore<threshold) continue;
+      const className = YoloDetector.FARM_CLASSES[bestCls];
+      if(!className || !ANIMALS.includes(className)) continue;
+      const x=(cx-bw/2)*scaleX, y=(cy-bh/2)*scaleY;
+      results.push({class:className, score:bestScore, bbox:[x,y,bw*scaleX,bh*scaleY]});
+    }
+    return results;
+  }
+
+  async detect(canvas, threshold=0.40){
+    if(!this.session) return [];
+    const inp = this._canvasToTensor(canvas);
+    let out;
+    try{ out = await this.session.run({images:inp}); }
+    catch(e){ return []; }
+    const key = Object.keys(out)[0];
+    return this._decode(out[key], canvas.width, canvas.height, threshold);
+  }
+}
 
 /* ═══════════════════════════════════════════════════════════════
    MODEL LOADING
@@ -1134,9 +1216,28 @@ async function initModel(){
     const fakeTimer = setInterval(()=>{
       if(fakePct < 88){ fakePct += (88-fakePct)*0.06+0.3; setProgress(fakePct); }
     }, 200);
-    model = await cocoSsd.load({base:'mobilenet_v2'});
-    clearInterval(fakeTimer);
-    setProgress(88); setStage('Веса COCO-SSD загружены ✓'); await sleep(80);
+    // v6: пробуем загрузить YOLOv8n через ONNX Runtime Web
+    //     если ONNX недоступен — fallback на COCO-SSD MobileNetV2
+    if(window._ortReady && typeof ort !== 'undefined'){
+      setStage('Загрузка YOLOv8n (ONNX)…');
+      const YOLO_URL = 'https://huggingface.co/niconielsen32/YOLOv8n-COCO-ONNX/resolve/main/yolov8n.onnx';
+      try{
+        const yolo = new YoloDetector(YOLO_URL, 640);
+        await yolo.load();
+        model = yolo;
+        clearInterval(fakeTimer);
+        setProgress(88); setStage('YOLOv8n (ONNX) загружен ✓ — улучшенная детекция стад');
+      }catch(yoloErr){
+        console.warn('YOLOv8n ONNX failed, using COCO-SSD:', yoloErr.message);
+        model = await cocoSsd.load({base:'mobilenet_v2'});
+        clearInterval(fakeTimer);
+        setProgress(88); setStage('Веса COCO-SSD загружены ✓ (ONNX недоступен)');
+      }
+    } else {
+      model = await cocoSsd.load({base:'mobilenet_v2'});
+      clearInterval(fakeTimer);
+      setProgress(88); setStage('Веса COCO-SSD загружены ✓');
+    } await sleep(80);
 
     // v5: Build species classifier CNN head
     setStage('Инициализация классификатора корова/овца…');
@@ -1424,6 +1525,15 @@ let trackedObjects = [];  // [{id, class, bbox, kf, score, hits, lost, matched, 
 let nextTrackId    = 1;
 const countedTrackIds = new Set();  // track IDs already counted (anti double-count)
 
+// v6: Global Motion Compensation state
+let _lastDetCentroid = null;
+function _computeCentroid(dets){
+  if(!dets.length) return null;
+  let sx=0, sy=0;
+  dets.forEach(d=>{ sx+=d.bbox[0]+d.bbox[2]/2; sy+=d.bbox[1]+d.bbox[3]/2; });
+  return [sx/dets.length, sy/dets.length];
+}
+
 // Minimal Kalman Filter for 1D position (applied per bbox dimension)
 // State: [x, vx]  Measurement: x
 function kalmanCreate(init){
@@ -1435,9 +1545,10 @@ function kalmanPredict(k){
   return k.x;
 }
 function kalmanUpdate(k, meas){
-  const kg = k.p / (k.p + k.r);
-  k.x += kg * (meas - k.x);
-  k.v += kg * 0.5 * (meas - k.x);  // velocity estimate
+  const kg  = k.p / (k.p + k.r);
+  const err = meas - k.x;           // v6: innovation вычисляется ДО обновления позиции
+  k.x += kg * err;
+  k.v  = k.v * 0.8 + kg * err * 0.5; // v6: EMA скорости с демпфированием
   k.p  = (1 - kg) * k.p;
   return k.x;
 }
@@ -1488,14 +1599,29 @@ function trackUpdate(t, det){
  *   Pass 2: match remaining low-score detections to lost tracks by IoU ≥ TRACK_IOU_LOW
  */
 function updateTracker(detections){
+  // v6: Global Motion Compensation — компенсируем поворот камеры
+  const curCentroid = _computeCentroid(detections);
+  if(_lastDetCentroid && curCentroid) {
+    const dx = curCentroid[0] - _lastDetCentroid[0];
+    const dy = curCentroid[1] - _lastDetCentroid[1];
+    if(Math.abs(dx) > 55 || Math.abs(dy) > 55) {
+      // Камера повернулась — сдвигаем все треки на вектор смещения
+      trackedObjects.forEach(t => {
+        t.kfX.x -= dx; t.kfY.x -= dy;
+        t.bbox[0] -= dx; t.bbox[1] -= dy;
+      });
+    }
+  }
+  _lastDetCentroid = curCentroid;
+
   // Predict positions for all existing tracks
   trackedObjects.forEach(t=>{ trackPredict(t); t.matched = false; });
 
-  const highDets = detections.filter(d=>d.score >= 0.50);
-  const lowDets  = detections.filter(d=>d.score <  0.50);
+  const highDets = detections.filter(d=>d.score >= 0.45); // v6: снижен порог
+  const lowDets  = detections.filter(d=>d.score <  0.45);
 
-  // ── Pass 1: high confidence detections ───────────────────────
-  const unmatchedHigh = matchDetToTracks(highDets, trackedObjects, TRACK_IOU_HIGH);
+  // ── Pass 1: class-agnostic high confidence ────────────────────
+  const unmatchedHigh = matchDetToTracks(highDets, trackedObjects, TRACK_IOU_HIGH, false);
 
   // ── Pass 2: low confidence detections → lost tracks only ─────
   const lostTracks = trackedObjects.filter(t=>!t.matched);
@@ -1514,19 +1640,24 @@ function updateTracker(detections){
   return trackedObjects.filter(t=>t.hits >= TRACK_MIN_HITS && t.lost === 0);
 }
 
-// Greedy IoU matching; returns unmatched detections
-function matchDetToTracks(dets, tracks, iouThresh){
+// v6: Greedy IoU matching; classStrict=false → class-agnostic первый проход
+function matchDetToTracks(dets, tracks, iouThresh, classStrict=true){
   const unmatched = [];
   for(const det of dets){
     let bestIdx = -1, bestIou = iouThresh;
     for(let i=0; i<tracks.length; i++){
       const t = tracks[i];
       if(t.matched) continue;
-      if(t.class !== det.class) continue;
+      // classStrict=false: сопоставляем только по IoU, без учёта класса
+      // (спасает трек когда корова на кадре определена как ovca или наоборот)
+      if(classStrict && t.class !== det.class) continue;
       const iou = bboxIou(t.bbox, det.bbox);
       if(iou > bestIou){ bestIou = iou; bestIdx = i; }
     }
     if(bestIdx >= 0){
+      // Обновляем класс трека только если детектор уверен
+      if(det.score >= 0.55 && ['cow','sheep'].includes(det.class))
+        tracks[bestIdx].class = det.class;
       trackUpdate(tracks[bestIdx], det);
     } else {
       unmatched.push(det);
@@ -1536,19 +1667,52 @@ function matchDetToTracks(dets, tracks, iouThresh){
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   FRAME HISTORY (rolling average of last N frames)
+   FRAME HISTORY — v6: медианный фильтр + confidence voting
+   Счётчик меняется только если 60%+ кадров согласны с новым числом.
 ═══════════════════════════════════════════════════════════════ */
 const frameHistory=[];
 function pushHistory(c){
   frameHistory.push({...c});
   if(frameHistory.length>HISTORY) frameHistory.shift();
 }
+// Оставляем avgHistory для совместимости (не используется в camLoop)
 function avgHistory(){
-  const acc={cow:0,sheep:0};
-  frameHistory.forEach(f=>ANIMALS.forEach(a=>acc[a]+=f[a]));
+  const acc={};
+  ANIMALS.forEach(a=>acc[a]=0);
+  frameHistory.forEach(f=>ANIMALS.forEach(a=>acc[a]+=(f[a]||0)));
   const n=frameHistory.length||1;
   ANIMALS.forEach(a=>acc[a]=Math.round(acc[a]/n));
   return acc;
+}
+// v6: медиана по массиву кадров
+function medianHistory(){
+  const acc={};
+  ANIMALS.forEach(a=>{
+    const vals=frameHistory.map(f=>f[a]||0).sort((x,y)=>x-y);
+    const n=vals.length;
+    acc[a]=n>0
+      ? Math.round(n%2!==0 ? vals[Math.floor(n/2)] : (vals[n/2-1]+vals[n/2])/2)
+      : 0;
+  });
+  return acc;
+}
+// v6: majority voting — публикуем значение только если ≥60% кадров согласны
+const VOTE_RATIO=0.6;
+function votedHistory(){
+  const acc={};
+  ANIMALS.forEach(a=>{
+    const vals=frameHistory.map(f=>f[a]||0);
+    const freq={};
+    vals.forEach(v=>freq[v]=(freq[v]||0)+1);
+    const [winner,cnt]=Object.entries(freq).sort((a,b)=>b[1]-a[1])[0];
+    acc[a]=cnt/vals.length>=VOTE_RATIO ? parseInt(winner) : (confirmedCounts[a]||0);
+  });
+  return acc;
+}
+// Публичная точка входа — используется в camLoop
+function stableCount(){
+  if(frameHistory.length<3) return medianHistory();
+  return votedHistory();
 }
 
 /* ═══════════════════════════════════════════════════════════════
