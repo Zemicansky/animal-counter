@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
-<title>AI Счётчик животных — Ферма v5.0</title>
+<title>AI Счётчик животных — Ферма v6.0</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700;900&family=Roboto:wght@400;500&display=swap" rel="stylesheet"/>
 
@@ -501,8 +501,53 @@ footer{
 }
 #btn-reid-reset{margin-top:8px}
 
-/* Classifier confidence bar */
-.cls-conf-bar{
+/* ═══════════════════════════════════════════════════════════════
+   ЗАДАЧА 5: Улучшенный мобильный дизайн
+═══════════════════════════════════════════════════════════════ */
+@media(max-width:768px){
+  main{ padding:8px 10px 16px; }
+
+  /* Кнопки крупнее, удобнее для пальцев */
+  .btn{
+    min-height:54px;
+    font-size:1.05rem;
+    padding:0 20px;
+  }
+  .btn-sm{ min-height:46px; font-size:.95rem; }
+
+  /* Управление камерой — на всю ширину */
+  .cam-controls{
+    flex-direction:column;
+    align-items:stretch;
+    gap:10px;
+    margin-top:12px;
+  }
+  .cam-controls .btn{
+    width:100%;
+    justify-content:center;
+  }
+
+  /* Видео — на весь экран по ширине */
+  .media-wrap{ border-radius:8px; }
+  #cam-video{
+    max-height:56vw;
+    border-radius:8px;
+  }
+
+  /* Заголовок компактнее */
+  header{ padding:8px 12px 0; }
+  .hdr-logo{ font-size:1.5rem; }
+  .tabs .tab-btn{ min-height:44px; font-size:.88rem; }
+}
+
+/* Кнопка переключения камеры (фронт/тыл) */
+#btn-flip{
+  display:none;
+}
+@media(max-width:768px){
+  #btn-flip{ display:inline-flex; }
+}
+
   height:4px;border-radius:2px;margin-top:3px;
   background:var(--border);overflow:hidden;
 }
@@ -510,6 +555,40 @@ footer{
 
 /* ByteTrack status */
 .fps-row .bt-stat{color:var(--sky)}
+
+/* ═══════════════════════════════════════════════════════════════
+   ЗАДАЧА 3: Плавающий счётчик поверх камеры
+═══════════════════════════════════════════════════════════════ */
+#cam-hud{
+  position:absolute;
+  top:10px; right:10px;
+  z-index:20;
+  background:rgba(0,0,0,0.62);
+  border:1px solid rgba(94,203,62,0.4);
+  border-radius:12px;
+  padding:8px 12px;
+  backdrop-filter:blur(4px);
+  -webkit-backdrop-filter:blur(4px);
+  display:none;
+  flex-direction:column;
+  gap:3px;
+  min-width:130px;
+  pointer-events:none;
+}
+#cam-hud.active{ display:flex; }
+.hud-row{
+  display:flex;align-items:center;gap:6px;
+  font-family:'Roboto Condensed',sans-serif;font-weight:700;
+  font-size:clamp(1rem,4vw,1.35rem);color:#fff;line-height:1;
+}
+.hud-row .hud-lbl{ font-size:.72em;color:rgba(255,255,255,.7);font-weight:400; }
+.hud-row .hud-n{ margin-left:auto;color:var(--green);font-size:1.2em; }
+.hud-divider{ border:none;border-top:1px solid rgba(255,255,255,.15);margin:3px 0; }
+.hud-total{
+  font-family:'Roboto Condensed',sans-serif;font-weight:900;
+  font-size:clamp(1.2rem,5vw,1.6rem);color:var(--green);
+  text-align:right;line-height:1;
+}
 </style>
 </head>
 <body>
@@ -519,8 +598,16 @@ footer{
 ═══════════════════════════════════════════════════════════════ -->
 <div id="loading-screen">
   <div class="load-logo">🌾</div>
-  <div class="load-title">AI Счётчик животных v5</div>
+  <div class="load-title">AI Счётчик животных v6</div>
+  <!-- ЗАДАЧА 4: Версия при загрузке -->
   <div class="load-sub">Загрузка ИИ-модели — подождите…</div>
+  <div id="load-version" style="
+    font-family:'Roboto Condensed',sans-serif;font-weight:700;
+    font-size:.82rem;color:var(--green);letter-spacing:.06em;
+    background:rgba(94,203,62,.1);border:1px solid rgba(94,203,62,.3);
+    border-radius:20px;padding:4px 14px;margin-bottom:16px;
+    opacity:1;transition:opacity 1s;
+  ">Обновлённая версия от 17.05.2026</div>
   <div class="progress-outer"><div class="progress-inner" id="prog-bar"></div></div>
   <div id="load-pct">0%</div>
   <div id="load-stage">Инициализация…</div>
@@ -564,6 +651,13 @@ footer{
       <div class="media-wrap" id="cam-wrap" style="display:none">
         <video id="cam-video" autoplay muted playsinline></video>
         <canvas id="cam-overlay"></canvas>
+        <!-- ЗАДАЧА 3: HUD счётчик поверх видео -->
+        <div id="cam-hud">
+          <div class="hud-row">🐄 <span class="hud-lbl">Коровы</span><span class="hud-n" id="hud-cow">0</span></div>
+          <div class="hud-row">🐑 <span class="hud-lbl">Овцы</span><span class="hud-n" id="hud-sheep">0</span></div>
+          <hr class="hud-divider"/>
+          <div class="hud-total" id="hud-total">0</div>
+        </div>
       </div>
       <div class="cam-no-signal visible" id="cam-nosignal">
         <div class="ns-icon">📷</div>
@@ -574,6 +668,8 @@ footer{
         <button class="btn bg" id="btn-start" onclick="startCamera()">▶ Включить камеру</button>
         <button class="btn br" id="btn-stop"  onclick="stopCamera()" style="display:none">■ Выключить</button>
         <button class="btn bo btn-sm" id="btn-snap" onclick="snapPhoto()" style="display:none">📸 Снимок</button>
+        <!-- ЗАДАЧА 5: Переключение фронт/тыл -->
+        <button class="btn bo btn-sm" id="btn-flip" onclick="flipCamera()" style="display:none">🔄 Камера</button>
       </div>
       <div class="alert-strip ae" id="cam-err"></div>
       <div class="alert-strip aw" id="cam-warn"></div>
@@ -713,16 +809,12 @@ footer{
 </div><!-- /panel-ph -->
 
 </main>
-<footer>Все вычисления локальны · Фото не передаются · TensorFlow.js + COCO-SSD + Re-ID · v5.0</footer>
+<footer>Все вычисления локальны · Фото не передаются · TensorFlow.js + COCO-SSD + Re-ID · v6.0 · 17.05.2026</footer>
 </div><!-- /app -->
 
 <!-- ═══════════════════════════════════════════════════════════
      SCRIPTS
 ═══════════════════════════════════════════════════════════════ -->
-<!-- v6: ONNX Runtime Web (YOLOv8n backend) -->
-<script>window._ortReady=false;</script>
-<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js"
-        onload="window._ortReady=true" onerror="window._ortFailed=true"></script>
 <script>window._tfReady=false;window._cocoReady=false;</script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"
         onload="window._tfReady=true" onerror="loadTFFallback()"></script>
@@ -749,17 +841,17 @@ function loadCocoFallback(){
 /* ═══════════════════════════════════════════════════════════════
    CONSTANTS  — v5.0
 ═══════════════════════════════════════════════════════════════ */
-const ANIMALS     = ['cow','calf','sheep']; // v6: добавлен класс телёнка
-const LABELS      = {cow:'Корова', calf:'Телёнок', sheep:'Овца'};
-const BOX_CLR     = {cow:'#cc4422', calf:'#e8901a', sheep:'#4aa8cc'};
+const ANIMALS     = ['cow','sheep'];
+const LABELS      = {cow:'Корова', sheep:'Овца'};
+const BOX_CLR     = {cow:'#cc4422', sheep:'#4aa8cc'};
 
-const THRESHOLD   = 0.40; // v6: поднят с 0.28 → убирает мусор
+const THRESHOLD   = 0.28;
 const IOU_NMS     = 0.45;
 const IOU_SMALL   = 0.25;
 const SMALL_RATIO = 0.25;
 const DETECT_MS   = 600;
-const HISTORY     = 8;  // v6: увеличен буфер для медианного фильтра
-const CONFIRM_SEC = 2;  // v6: быстрее подтверждение
+const HISTORY     = 6;   // ЗАДАЧА 2: увеличен с 4 до 6 — счёт стабильнее при кратком движении
+const CONFIRM_SEC = 3;
 const CIRC        = 87.96;
 
 // Tiling
@@ -769,12 +861,12 @@ const TILE_OVERLAP= 0.20;
 const CROSS_NMS   = 0.40;
 
 // ── v5: ByteTrack parameters ──────────────────────────────────
-const TRACK_IOU_HIGH  = 0.50;  // high-confidence association threshold
-const TRACK_IOU_LOW   = 0.18;  // low-confidence second-pass threshold
-const TRACK_MAX_LOST  = 8;     // frames to keep a lost track (was 4)
+const TRACK_IOU_HIGH  = 0.45;  // high-confidence association threshold (снижен для лучшего матчинга при движении)
+const TRACK_IOU_LOW   = 0.15;  // low-confidence second-pass threshold
+const TRACK_MAX_LOST  = 12;    // ЗАДАЧА 2: увеличен — трек живёт дольше при пропадании (было 8)
 const TRACK_MIN_HITS  = 2;     // frames before track is confirmed
-const KALMAN_Q        = 0.01;  // process noise (lower = smoother prediction)
-const KALMAN_R        = 0.1;   // measurement noise
+const KALMAN_Q        = 0.008; // ЗАДАЧА 2: снижен process noise → более плавное предсказание
+const KALMAN_R        = 0.08;  // ЗАДАЧА 2: снижен measurement noise → быстрее реагирует на движение
 
 // ── v5: Classifier parameters ─────────────────────────────────
 const CLASSIFIER_SIZE   = 64;   // resize crop for species classifier
@@ -798,84 +890,6 @@ const setStage = txt => document.getElementById('load-stage').textContent = txt;
 const sleep    = ms  => new Promise(r => setTimeout(r, ms));
 
 /* ═══════════════════════════════════════════════════════════════
-   v6: YoloDetector — обёртка над ONNX Runtime Web для YOLOv8n
-   API: await yolo.detect(canvas, threshold) → [{class, score, bbox:[x,y,w,h]}]
-   Полностью совместима с cocoSsd.model.detect() — не ломает camLoop.
-═══════════════════════════════════════════════════════════════ */
-class YoloDetector {
-  // COCO class indices → имена классов фермы
-  static FARM_CLASSES = {19:'cow', 17:'sheep', 16:'dog', 15:'cat', 14:'bird'};
-
-  constructor(modelPath, inputSize=640){
-    this.modelPath = modelPath;
-    this.inputSize = inputSize;
-    this.session   = null;
-  }
-
-  async load(){
-    const opts = {
-      executionProviders: ['webgl','wasm'],
-      graphOptimizationLevel: 'all'
-    };
-    this.session = await ort.InferenceSession.create(this.modelPath, opts);
-    // warm-up pass
-    const dummy = new Float32Array(1*3*this.inputSize*this.inputSize);
-    const t = new ort.Tensor('float32', dummy, [1,3,this.inputSize,this.inputSize]);
-    try{ await this.session.run({images:t}); }catch(e){}
-    return this;
-  }
-
-  _canvasToTensor(canvas){
-    const S = this.inputSize;
-    const tmp = document.createElement('canvas');
-    tmp.width = tmp.height = S;
-    tmp.getContext('2d').drawImage(canvas, 0, 0, S, S);
-    const d = tmp.getContext('2d').getImageData(0,0,S,S).data;
-    const f = new Float32Array(S*S*3);
-    for(let i=0; i<S*S; i++){
-      f[i]       = d[i*4  ]/255; // R
-      f[i+S*S]   = d[i*4+1]/255; // G
-      f[i+S*S*2] = d[i*4+2]/255; // B
-    }
-    return new ort.Tensor('float32', f, [1,3,S,S]);
-  }
-
-  _decode(output, origW, origH, threshold){
-    const S = this.inputSize;
-    const scaleX = origW/S, scaleY = origH/S;
-    const data = output.data;
-    // YOLOv8 ONNX export format: [1, 84, 8400]
-    const numBoxes = Math.round(data.length / 84);
-    const results = [];
-    for(let i=0; i<numBoxes; i++){
-      const cx = data[i], cy = data[i+numBoxes];
-      const bw = data[i+numBoxes*2], bh = data[i+numBoxes*3];
-      let bestCls=-1, bestScore=-1;
-      for(let c=0; c<80; c++){
-        const s = data[i+numBoxes*(4+c)];
-        if(s>bestScore){ bestScore=s; bestCls=c; }
-      }
-      if(bestScore<threshold) continue;
-      const className = YoloDetector.FARM_CLASSES[bestCls];
-      if(!className || !ANIMALS.includes(className)) continue;
-      const x=(cx-bw/2)*scaleX, y=(cy-bh/2)*scaleY;
-      results.push({class:className, score:bestScore, bbox:[x,y,bw*scaleX,bh*scaleY]});
-    }
-    return results;
-  }
-
-  async detect(canvas, threshold=0.40){
-    if(!this.session) return [];
-    const inp = this._canvasToTensor(canvas);
-    let out;
-    try{ out = await this.session.run({images:inp}); }
-    catch(e){ return []; }
-    const key = Object.keys(out)[0];
-    return this._decode(out[key], canvas.width, canvas.height, threshold);
-  }
-}
-
-/* ═══════════════════════════════════════════════════════════════
    MODEL LOADING
 ═══════════════════════════════════════════════════════════════ */
 let model = null;
@@ -892,27 +906,38 @@ let featureExtractor= null;  // shared MobileNetV2 base (truncated)
 
 // Colour statistics that strongly separate cows from sheep
 // (used as fast pre-filter before heavy CNN)
-// Cows: warm browns/blacks; Sheep: cool grey/white
+// ЗАДАЧА 1: Улучшены пороги и добавлен признак текстурности
 function quickSpeciesHint(cropCanvas){
   const ctx = cropCanvas.getContext('2d');
   const W = cropCanvas.width, H = cropCanvas.height;
   const d = ctx.getImageData(0, 0, W, H).data;
-  let warmPx = 0, coolPx = 0, total = 0;
+  let warmPx = 0, coolPx = 0, darkPx = 0, total = 0;
+  let lumSum = 0;
   for(let i = 0; i < d.length; i += 4){
     const r = d[i], g = d[i+1], b = d[i+2];
     const lum = 0.299*r + 0.587*g + 0.114*b;
-    if(lum < 20 || lum > 235) continue; // skip black/white extremes
+    if(lum < 15 || lum > 240) continue; // skip near-black/white
     total++;
-    // Warm = (r-b) > 15: brown, tawny, red → cow
-    if(r - b > 15) warmPx++;
-    // Cool = (b-r) > 5 || near-grey high lum → sheep
-    else if(b - r > 5 || (lum > 140 && Math.abs(r-g) < 18 && Math.abs(g-b) < 18)) coolPx++;
+    lumSum += lum;
+    // Warm = (r-b) > 18: brown, tawny, red-brown → cow
+    if(r - b > 18 && r > 80) warmPx++;
+    // Dark + warm: classic black-and-white cow patches
+    else if(lum < 60) darkPx++;
+    // Cool = near-grey high luminance → sheep
+    else if((lum > 130 && Math.abs(r-g) < 20 && Math.abs(g-b) < 20) ||
+            (b - r > 8)) coolPx++;
   }
-  if(total < 50) return null; // too few pixels to decide
+  if(total < 50) return null;
   const warmRatio = warmPx / total;
   const coolRatio = coolPx / total;
-  if(warmRatio > 0.38) return {class:'cow',   score: 0.60 + warmRatio * 0.30};
-  if(coolRatio > 0.35) return {class:'sheep', score: 0.60 + coolRatio * 0.30};
+  const darkRatio = darkPx / total;
+  const avgLum    = lumSum / total;
+
+  // Cows are warmer/darker; sheep are lighter/cooler/greyer
+  if(warmRatio > 0.32 || (warmRatio > 0.20 && darkRatio > 0.15))
+    return {class:'cow',   score: 0.62 + Math.min(warmRatio, 0.3)};
+  if(coolRatio > 0.30 || (avgLum > 155 && coolRatio > 0.18))
+    return {class:'sheep', score: 0.62 + Math.min(coolRatio, 0.3)};
   return null;
 }
 
@@ -992,9 +1017,37 @@ async function reclassifyDetections(canvas, preds){
 
     const hint = await predict_species(crop);
     if(hint){
-      results.push({...p, class: hint.class, score: (p.score + hint.score) / 2,
-                    classifierScore: hint.score});
+      const merged = {...p, class: hint.class, score: (p.score + hint.score) / 2,
+                    classifierScore: hint.score};
+
+      // ЗАДАЧА 1: Лог уверенности в консоль
+      const changed = hint.class !== p.class;
+      console.log(
+        `%c[Species] COCO=${p.class}(${(p.score*100).toFixed(0)}%) → ` +
+        `Classifier=${hint.class}(${(hint.score*100).toFixed(0)}%) ` +
+        `Final=${merged.class}(${(merged.score*100).toFixed(0)}%) ` +
+        (changed ? '⚠️ RECLASSIFIED' : '✓ confirmed'),
+        changed ? 'color:orange;font-weight:bold' : 'color:#7ec87e'
+      );
+
+      // ЗАДАЧА 1: Постобработка — корова слишком маленькая → проверяем
+      if(merged.class === 'cow'){
+        const area = bw * bh;
+        const totalArea = canvas.width * canvas.height;
+        const relSize = area / totalArea;
+        if(relSize < 0.005 && merged.score < 0.65){
+          // Объект очень маленький и уверенность невысокая → скорее всего овца
+          console.log(`%c[Species] Cow too small (${(relSize*100).toFixed(2)}% frame) + low score → reclassify as sheep`,
+            'color:orange');
+          results.push({...merged, class:'sheep', score: merged.score * 0.9});
+          continue;
+        }
+      }
+      results.push(merged);
     } else {
+      // ЗАДАЧА 1: Fallback — тоже логируем
+      console.log(`%c[Species] COCO=${p.class}(${(p.score*100).toFixed(0)}%) → no classifier hint, keeping original`,
+        'color:#888');
       results.push(p);
     }
   }
@@ -1216,28 +1269,9 @@ async function initModel(){
     const fakeTimer = setInterval(()=>{
       if(fakePct < 88){ fakePct += (88-fakePct)*0.06+0.3; setProgress(fakePct); }
     }, 200);
-    // v6: пробуем загрузить YOLOv8n через ONNX Runtime Web
-    //     если ONNX недоступен — fallback на COCO-SSD MobileNetV2
-    if(window._ortReady && typeof ort !== 'undefined'){
-      setStage('Загрузка YOLOv8n (ONNX)…');
-      const YOLO_URL = 'https://huggingface.co/niconielsen32/YOLOv8n-COCO-ONNX/resolve/main/yolov8n.onnx';
-      try{
-        const yolo = new YoloDetector(YOLO_URL, 640);
-        await yolo.load();
-        model = yolo;
-        clearInterval(fakeTimer);
-        setProgress(88); setStage('YOLOv8n (ONNX) загружен ✓ — улучшенная детекция стад');
-      }catch(yoloErr){
-        console.warn('YOLOv8n ONNX failed, using COCO-SSD:', yoloErr.message);
-        model = await cocoSsd.load({base:'mobilenet_v2'});
-        clearInterval(fakeTimer);
-        setProgress(88); setStage('Веса COCO-SSD загружены ✓ (ONNX недоступен)');
-      }
-    } else {
-      model = await cocoSsd.load({base:'mobilenet_v2'});
-      clearInterval(fakeTimer);
-      setProgress(88); setStage('Веса COCO-SSD загружены ✓');
-    } await sleep(80);
+    model = await cocoSsd.load({base:'mobilenet_v2'});
+    clearInterval(fakeTimer);
+    setProgress(88); setStage('Веса COCO-SSD загружены ✓'); await sleep(80);
 
     // v5: Build species classifier CNN head
     setStage('Инициализация классификатора корова/овца…');
@@ -1274,6 +1308,10 @@ async function initModel(){
 function retryLoad(){ initModel(); }
 
 function showApp(){
+  // ЗАДАЧА 4: плавно скрываем версионную надпись
+  const versionEl = document.getElementById('load-version');
+  if(versionEl){ versionEl.style.opacity='0'; }
+
   const ls = document.getElementById('loading-screen');
   ls.classList.add('fade-out');
   setTimeout(()=>ls.style.display='none', 520);
@@ -1525,15 +1563,6 @@ let trackedObjects = [];  // [{id, class, bbox, kf, score, hits, lost, matched, 
 let nextTrackId    = 1;
 const countedTrackIds = new Set();  // track IDs already counted (anti double-count)
 
-// v6: Global Motion Compensation state
-let _lastDetCentroid = null;
-function _computeCentroid(dets){
-  if(!dets.length) return null;
-  let sx=0, sy=0;
-  dets.forEach(d=>{ sx+=d.bbox[0]+d.bbox[2]/2; sy+=d.bbox[1]+d.bbox[3]/2; });
-  return [sx/dets.length, sy/dets.length];
-}
-
 // Minimal Kalman Filter for 1D position (applied per bbox dimension)
 // State: [x, vx]  Measurement: x
 function kalmanCreate(init){
@@ -1545,10 +1574,9 @@ function kalmanPredict(k){
   return k.x;
 }
 function kalmanUpdate(k, meas){
-  const kg  = k.p / (k.p + k.r);
-  const err = meas - k.x;           // v6: innovation вычисляется ДО обновления позиции
-  k.x += kg * err;
-  k.v  = k.v * 0.8 + kg * err * 0.5; // v6: EMA скорости с демпфированием
+  const kg = k.p / (k.p + k.r);
+  k.x += kg * (meas - k.x);
+  k.v += kg * 0.5 * (meas - k.x);  // velocity estimate
   k.p  = (1 - kg) * k.p;
   return k.x;
 }
@@ -1599,29 +1627,14 @@ function trackUpdate(t, det){
  *   Pass 2: match remaining low-score detections to lost tracks by IoU ≥ TRACK_IOU_LOW
  */
 function updateTracker(detections){
-  // v6: Global Motion Compensation — компенсируем поворот камеры
-  const curCentroid = _computeCentroid(detections);
-  if(_lastDetCentroid && curCentroid) {
-    const dx = curCentroid[0] - _lastDetCentroid[0];
-    const dy = curCentroid[1] - _lastDetCentroid[1];
-    if(Math.abs(dx) > 55 || Math.abs(dy) > 55) {
-      // Камера повернулась — сдвигаем все треки на вектор смещения
-      trackedObjects.forEach(t => {
-        t.kfX.x -= dx; t.kfY.x -= dy;
-        t.bbox[0] -= dx; t.bbox[1] -= dy;
-      });
-    }
-  }
-  _lastDetCentroid = curCentroid;
-
   // Predict positions for all existing tracks
   trackedObjects.forEach(t=>{ trackPredict(t); t.matched = false; });
 
-  const highDets = detections.filter(d=>d.score >= 0.45); // v6: снижен порог
-  const lowDets  = detections.filter(d=>d.score <  0.45);
+  const highDets = detections.filter(d=>d.score >= 0.50);
+  const lowDets  = detections.filter(d=>d.score <  0.50);
 
-  // ── Pass 1: class-agnostic high confidence ────────────────────
-  const unmatchedHigh = matchDetToTracks(highDets, trackedObjects, TRACK_IOU_HIGH, false);
+  // ── Pass 1: high confidence detections ───────────────────────
+  const unmatchedHigh = matchDetToTracks(highDets, trackedObjects, TRACK_IOU_HIGH);
 
   // ── Pass 2: low confidence detections → lost tracks only ─────
   const lostTracks = trackedObjects.filter(t=>!t.matched);
@@ -1640,24 +1653,33 @@ function updateTracker(detections){
   return trackedObjects.filter(t=>t.hits >= TRACK_MIN_HITS && t.lost === 0);
 }
 
-// v6: Greedy IoU matching; classStrict=false → class-agnostic первый проход
-function matchDetToTracks(dets, tracks, iouThresh, classStrict=true){
+// Greedy IoU matching; returns unmatched detections
+// ЗАДАЧА 2: Добавлен distance fallback — если IoU=0, но центры близко → тоже матчим
+function matchDetToTracks(dets, tracks, iouThresh){
   const unmatched = [];
   for(const det of dets){
-    let bestIdx = -1, bestIou = iouThresh;
+    let bestIdx = -1, bestScore = iouThresh;
+    const [dcx, dcy] = centerOf(det.bbox);
+    const detArea = Math.sqrt(det.bbox[2] * det.bbox[3]);
+
     for(let i=0; i<tracks.length; i++){
       const t = tracks[i];
       if(t.matched) continue;
-      // classStrict=false: сопоставляем только по IoU, без учёта класса
-      // (спасает трек когда корова на кадре определена как ovca или наоборот)
-      if(classStrict && t.class !== det.class) continue;
+      if(t.class !== det.class) continue;
       const iou = bboxIou(t.bbox, det.bbox);
-      if(iou > bestIou){ bestIou = iou; bestIdx = i; }
+      if(iou > bestScore){ bestScore = iou; bestIdx = i; continue; }
+
+      // ЗАДАЧА 2: Distance fallback — если IoU слабый из-за движения камеры
+      if(iou < iouThresh && bestIdx < 0){
+        const [tcx, tcy] = centerOf(t.bbox);
+        const dist = Math.hypot(dcx - tcx, dcy - tcy);
+        const maxDist = detArea * 1.5; // допуск = 1.5× диагональ объекта
+        if(dist < maxDist && iou > iouThresh * 0.4){
+          bestIdx = i;
+        }
+      }
     }
     if(bestIdx >= 0){
-      // Обновляем класс трека только если детектор уверен
-      if(det.score >= 0.55 && ['cow','sheep'].includes(det.class))
-        tracks[bestIdx].class = det.class;
       trackUpdate(tracks[bestIdx], det);
     } else {
       unmatched.push(det);
@@ -1667,52 +1689,19 @@ function matchDetToTracks(dets, tracks, iouThresh, classStrict=true){
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   FRAME HISTORY — v6: медианный фильтр + confidence voting
-   Счётчик меняется только если 60%+ кадров согласны с новым числом.
+   FRAME HISTORY (rolling average of last N frames)
 ═══════════════════════════════════════════════════════════════ */
 const frameHistory=[];
 function pushHistory(c){
   frameHistory.push({...c});
   if(frameHistory.length>HISTORY) frameHistory.shift();
 }
-// Оставляем avgHistory для совместимости (не используется в camLoop)
 function avgHistory(){
-  const acc={};
-  ANIMALS.forEach(a=>acc[a]=0);
-  frameHistory.forEach(f=>ANIMALS.forEach(a=>acc[a]+=(f[a]||0)));
+  const acc={cow:0,sheep:0};
+  frameHistory.forEach(f=>ANIMALS.forEach(a=>acc[a]+=f[a]));
   const n=frameHistory.length||1;
   ANIMALS.forEach(a=>acc[a]=Math.round(acc[a]/n));
   return acc;
-}
-// v6: медиана по массиву кадров
-function medianHistory(){
-  const acc={};
-  ANIMALS.forEach(a=>{
-    const vals=frameHistory.map(f=>f[a]||0).sort((x,y)=>x-y);
-    const n=vals.length;
-    acc[a]=n>0
-      ? Math.round(n%2!==0 ? vals[Math.floor(n/2)] : (vals[n/2-1]+vals[n/2])/2)
-      : 0;
-  });
-  return acc;
-}
-// v6: majority voting — публикуем значение только если ≥60% кадров согласны
-const VOTE_RATIO=0.6;
-function votedHistory(){
-  const acc={};
-  ANIMALS.forEach(a=>{
-    const vals=frameHistory.map(f=>f[a]||0);
-    const freq={};
-    vals.forEach(v=>freq[v]=(freq[v]||0)+1);
-    const [winner,cnt]=Object.entries(freq).sort((a,b)=>b[1]-a[1])[0];
-    acc[a]=cnt/vals.length>=VOTE_RATIO ? parseInt(winner) : (confirmedCounts[a]||0);
-  });
-  return acc;
-}
-// Публичная точка входа — используется в camLoop
-function stableCount(){
-  if(frameHistory.length<3) return medianHistory();
-  return votedHistory();
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1797,12 +1786,35 @@ function applyConfirmedCounts(c){
 ═══════════════════════════════════════════════════════════════ */
 let camStream=null, camRafId=null;
 let lastDetectTs=0, fpsFrames=0, fpsTimer=null, totalFrames=0;
+// ЗАДАЧА 5: Переключение фронт/тыл камеры
+let currentFacingMode = 'environment';
+
+// ЗАДАЧА 5: Функция переключения камеры
+async function flipCamera(){
+  currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+  // Останавливаем текущий поток, не сбрасывая трекер
+  if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream=null; }
+  if(camRafId){ cancelAnimationFrame(camRafId); camRafId=null; }
+  try{
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video:{facingMode: currentFacingMode, width:{ideal:1920}, height:{ideal:1080}},
+      audio:false
+    });
+    const v = document.getElementById('cam-video');
+    v.srcObject = camStream;
+    await v.play();
+    camLoop();
+  }catch(e){
+    currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment'; // откат
+    showAlert('cam-err','❌ Не удалось переключить камеру: '+e.message);
+  }
+}
 
 async function startCamera(){
   hideAlert('cam-err'); hideAlert('cam-warn');
   try{
     camStream=await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}},
+      video:{facingMode: currentFacingMode, width:{ideal:1920},height:{ideal:1080}},
       audio:false
     });
   }catch(e){
@@ -1819,7 +1831,9 @@ async function startCamera(){
   document.getElementById('btn-start').style.display='none';
   document.getElementById('btn-stop').style.display='inline-flex';
   document.getElementById('btn-snap').style.display='inline-flex';
+  document.getElementById('btn-flip').style.display='inline-flex'; // ЗАДАЧА 5
   document.getElementById('live-dot').classList.add('active');
+  document.getElementById('cam-hud').classList.add('active'); // ЗАДАЧА 3
 
   fpsFrames=0; totalFrames=0;
   fpsTimer=setInterval(()=>{ document.getElementById('fps-val').textContent=fpsFrames; fpsFrames=0; },1000);
@@ -1847,9 +1861,11 @@ function stopCamera(){
   document.getElementById('btn-start').style.display='inline-flex';
   document.getElementById('btn-stop').style.display='none';
   document.getElementById('btn-snap').style.display='none';
+  document.getElementById('btn-flip').style.display='none'; // ЗАДАЧА 5
   document.getElementById('live-dot').classList.remove('active');
   document.getElementById('confirm-bar').classList.remove('visible');
   document.getElementById('counter-hdr-label').textContent='СЧЁТЧИК В РЕАЛЬНОМ ВРЕМЕНИ';
+  document.getElementById('cam-hud').classList.remove('active'); // ЗАДАЧА 3
   setCamDisplay({cow:0,sheep:0}, false);
   hideAlert('cam-warn');
   trackedObjects=[]; frameHistory.length=0;
@@ -1953,6 +1969,14 @@ function setCamDisplay(c, flash){
     document.getElementById('cam-row-'+a).classList.toggle('hit',n>0);
   });
   document.getElementById('cam-total').textContent=total;
+
+  // ЗАДАЧА 3: Синхронно обновляем HUD поверх камеры
+  const hudCow   = document.getElementById('hud-cow');
+  const hudSheep = document.getElementById('hud-sheep');
+  const hudTotal = document.getElementById('hud-total');
+  if(hudCow)   hudCow.textContent   = c['cow']   || 0;
+  if(hudSheep) hudSheep.textContent = c['sheep']  || 0;
+  if(hudTotal) hudTotal.textContent = total;
 }
 
 function snapPhoto(){
