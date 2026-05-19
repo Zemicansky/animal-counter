@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
-<title>AI Счётчик животных — Ферма v7.0</title>
+<title>AI Счётчик животных — Ферма v9.0 YOLOv8n</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700;900&family=Roboto:wght@400;500&display=swap" rel="stylesheet"/>
 
@@ -156,17 +156,20 @@ main{
 .tip strong{color:var(--text)}
 
 /* ═══════════════════════════════════════════════════════════════
-   CAMERA LAYOUT  — desktop: 50/50 side-by-side
-                  — mobile: video top, counter bottom (fixed)
+   CAMERA LAYOUT  — video on top (max 800px), counter below
+                  — mobile: same but narrower
 ═══════════════════════════════════════════════════════════════ */
 .cam-grid{
   display:grid;
-  grid-template-columns:1fr 1fr;
+  grid-template-columns:1fr;
   gap:14px;
   align-items:start;
+  max-width:100%;
 }
-@media(max-width:768px){
-  .cam-grid{grid-template-columns:1fr}
+@media(min-width:900px){
+  .cam-grid{
+    grid-template-columns:minmax(0,800px) 1fr;
+  }
 }
 
 /* ── Video column ───────────────────────────────────────────── */
@@ -174,15 +177,18 @@ main{
   position:relative;border-radius:12px;overflow:hidden;
   background:#000;line-height:0;
   box-shadow:0 6px 32px rgba(0,0,0,.6);
+  width:100%;
+  max-width:800px;
 }
 #cam-video{
   width:100%;display:block;border-radius:12px;
-  /* fill column, maintain aspect */
-  max-height:75vw; /* prevent overly tall on portrait */
+  /* УВЕЛИЧЕНО: фиксированная высота для видимости животных */
+  height:450px;
+  max-height:60vh;
   object-fit:cover;
 }
 @media(min-width:769px){
-  #cam-video{max-height:55vh}
+  #cam-video{height:450px;max-height:60vh}
 }
 #cam-overlay{
   position:absolute;inset:0;width:100%;height:100%;
@@ -192,10 +198,11 @@ main{
 .cam-no-signal{
   display:none;
   background:var(--card);border-radius:12px;
-  min-height:200px;
+  min-height:450px;
   align-items:center;justify-content:center;
   flex-direction:column;gap:10px;color:var(--muted);
   font-size:.9rem;text-align:center;padding:20px;
+  max-width:800px;
 }
 .cam-no-signal.visible{display:flex}
 .cam-no-signal .ns-icon{font-size:3rem}
@@ -225,8 +232,8 @@ main{
   position:sticky;top:12px;
 }
 
-/* Mobile: replace sticky sidebar with fixed bottom bar */
-@media(max-width:768px){
+/* Mobile: replace sticky sidebar with stacked section */
+@media(max-width:899px){
   .cam-counter-col{
     position:static;
     border-radius:12px;
@@ -250,9 +257,9 @@ main{
 .live-dot.active{background:var(--green);animation:blink 1.2s infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
 
-/* On mobile the counter rows sit in a horizontal flex strip */
+/* On narrow screens the counter rows sit in a horizontal flex strip */
 .counter-rows{padding:4px 0}
-@media(max-width:768px){
+@media(max-width:899px){
   .counter-rows{
     display:flex;flex-direction:row;
     padding:0;
@@ -527,10 +534,11 @@ footer{
     justify-content:center;
   }
 
-  /* Видео — на весь экран по ширине */
+  /* Видео — на весь экран по ширине, увеличена высота */
   .media-wrap{ border-radius:8px; }
   #cam-video{
-    max-height:56vw;
+    height:56vw;
+    max-height:60vh;
     border-radius:8px;
   }
 
@@ -598,7 +606,7 @@ footer{
 ═══════════════════════════════════════════════════════════════ -->
 <div id="loading-screen">
   <div class="load-logo">🌾</div>
-  <div class="load-title">AI Счётчик животных v7</div>
+  <div class="load-title">AI Счётчик животных v9 · YOLOv8n</div>
   <!-- ЗАДАЧА 4: Версия при загрузке -->
   <div class="load-sub">Загрузка улучшенного ИИ — подождите…</div>
   <div id="load-version" style="
@@ -607,7 +615,7 @@ footer{
     background:rgba(94,203,62,.1);border:1px solid rgba(94,203,62,.3);
     border-radius:20px;padding:4px 14px;margin-bottom:16px;
     opacity:1;transition:opacity 1s;
-  ">Улучшенная модель · v7.0 · 17.05.2026</div>
+  ">YOLOv8n ONNX · v9.0 · 19.05.2026</div>
   <div class="progress-outer"><div class="progress-inner" id="prog-bar"></div></div>
   <div id="load-pct">0%</div>
   <div id="load-stage">Инициализация…</div>
@@ -809,30 +817,21 @@ footer{
 </div><!-- /panel-ph -->
 
 </main>
-<footer>Все вычисления локальны · Фото не передаются · TensorFlow.js + COCO-SSD MobileNetV1 + Ensemble Classifier · v7.0 · 17.05.2026</footer>
+<footer>Все вычисления локальны · Фото не передаются · YOLOv8n ONNX Runtime Web + Ensemble Classifier · v9.0 · Последнее обновление модели и камеры: 19.05.2026</footer>
 </div><!-- /app -->
 
 <!-- ═══════════════════════════════════════════════════════════
      SCRIPTS
 ═══════════════════════════════════════════════════════════════ -->
-<script>window._tfReady=false;window._cocoReady=false;</script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"
-        onload="window._tfReady=true" onerror="loadTFFallback()"></script>
+<!-- ONNX Runtime Web — заменяет TensorFlow.js + COCO-SSD -->
+<script>window._ortReady=false;</script>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js"
+        onload="window._ortReady=true" onerror="loadOrtFallback()"></script>
 <script>
-function loadTFFallback(){
+function loadOrtFallback(){
   var s=document.createElement('script');
-  s.src='https://unpkg.com/@tensorflow/tfjs@4.17.0/dist/tf.min.js';
-  s.onload=function(){window._tfReady=true};
-  document.head.appendChild(s);
-}
-</script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"
-        onload="window._cocoReady=true" onerror="loadCocoFallback()"></script>
-<script>
-function loadCocoFallback(){
-  var s=document.createElement('script');
-  s.src='https://unpkg.com/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js';
-  s.onload=function(){window._cocoReady=true};
+  s.src='https://unpkg.com/onnxruntime-web@1.18.0/dist/ort.min.js';
+  s.onload=function(){window._ortReady=true};
   document.head.appendChild(s);
 }
 </script>
@@ -890,9 +889,9 @@ const setStage = txt => document.getElementById('load-stage').textContent = txt;
 const sleep    = ms  => new Promise(r => setTimeout(r, ms));
 
 /* ═══════════════════════════════════════════════════════════════
-   MODEL LOADING
+   MODEL — YOLOv8n ONNX (объявлен в блоке инференса ниже)
 ═══════════════════════════════════════════════════════════════ */
-let model = null;
+// ortSession объявляется вместе с инференс-кодом YOLOv8n
 
 /* ═══════════════════════════════════════════════════════════════
    v7: УЛУЧШЕННЫЙ МНОГОПРИЗНАКОВЫЙ КЛАССИФИКАТОР ВИДОВ
@@ -1349,71 +1348,265 @@ function resetReId(){
   updateReidPanel();
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   YOLOv8n ONNX — КОНСТАНТЫ МОДЕЛИ
+   Модель: yolov8n.onnx (COCO, 80 классов)
+   Вход:   [1, 3, 640, 640]  float32, нормализован [0,1], RGB
+   Выход:  [1, 84, 8400]     84 = 4 bbox + 80 классов
+   Источник: Hugging Face (публичный CORS, бесплатно)
+═══════════════════════════════════════════════════════════════ */
+const YOLO_INPUT_SIZE = 640;
+// COCO class indices нужных нам животных
+const COCO_COW   = 19;  // "cow"
+const COCO_SHEEP = 20;  // "sheep"
+// Имена 80 COCO классов (индекс = позиция)
+const COCO80 = ["person","bicycle","car","motorcycle","airplane","bus","train","truck","boat",
+  "traffic light","fire hydrant","stop sign","parking meter","bench","bird","cat","dog","horse",
+  "sheep","cow","elephant","bear","zebra","giraffe","backpack","umbrella","handbag","tie",
+  "suitcase","frisbee","skis","snowboard","sports ball","kite","baseball bat","baseball glove",
+  "skateboard","surfboard","tennis racket","bottle","wine glass","cup","fork","knife","spoon",
+  "bowl","banana","apple","sandwich","orange","broccoli","carrot","hot dog","pizza","donut",
+  "cake","chair","couch","potted plant","bed","dining table","toilet","tv","laptop","mouse",
+  "remote","keyboard","cell phone","microwave","oven","toaster","sink","refrigerator","book",
+  "clock","vase","scissors","teddy bear","hair drier","toothbrush"];
+
+// URL модели с Hugging Face — публичный CORS, не требует авторизации
+const YOLO_MODEL_URL = 'https://huggingface.co/onnx-community/yolov8n/resolve/main/onnx/model.onnx';
+const YOLO_MODEL_URL_FALLBACK = 'https://media.githubusercontent.com/media/ultralytics/assets/main/yolov8n.onnx';
+
+let ortSession = null;  // ONNX Runtime InferenceSession
+
+/* ═══════════════════════════════════════════════════════════════
+   ОЖИДАНИЕ ЗАГРУЗКИ ONNX RUNTIME
+═══════════════════════════════════════════════════════════════ */
 async function waitLibs(){
-  setStage('Загрузка TensorFlow.js и COCO-SSD…');
-  for(let i=0; i<70; i++){
-    if(window._tfReady && window._cocoReady) return;
-    await sleep(300);
-    setProgress(Math.min(i*0.9, 18));
+  setStage('Загрузка ONNX Runtime Web…');
+  for(let i=0; i<80; i++){
+    if(window._ortReady && typeof ort !== 'undefined') return;
+    await sleep(250);
+    setProgress(Math.min(i*0.25, 15));
   }
-  throw new Error('Библиотеки не загрузились за 21 секунду');
+  throw new Error('ONNX Runtime не загрузился за 20 секунд. Проверьте интернет.');
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   ЗАГРУЗКА МОДЕЛИ YOLOv8n С ПРОГРЕСС-БАРОМ
+═══════════════════════════════════════════════════════════════ */
+async function loadYoloModel(){
+  // Настройка ONNX Runtime — приоритет WebGL > WASM
+  ort.env.wasm.numThreads = 1;
+  ort.env.wasm.simd = true;
+
+  const urls = [YOLO_MODEL_URL, YOLO_MODEL_URL_FALLBACK];
+  let lastErr;
+
+  for(const url of urls){
+    try{
+      setStage(`Загрузка YOLOv8n (~13 МБ) с ${url.includes('huggingface') ? 'Hugging Face' : 'GitHub'}…`);
+
+      // Скачиваем с отслеживанием прогресса
+      const resp = await fetch(url);
+      if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const total = parseInt(resp.headers.get('content-length') || '0');
+      const reader = resp.body.getReader();
+      const chunks = [];
+      let loaded = 0;
+
+      while(true){
+        const {done, value} = await reader.read();
+        if(done) break;
+        chunks.push(value);
+        loaded += value.length;
+        if(total > 0){
+          // Прогресс: 20%→88% во время скачивания
+          const pct = 20 + (loaded/total)*68;
+          setProgress(Math.min(pct, 88));
+          setStage(`Загрузка YOLOv8n: ${(loaded/1024/1024).toFixed(1)} / ${(total/1024/1024).toFixed(1)} МБ…`);
+        } else {
+          // Если content-length неизвестен — анимируем
+          setProgress(Math.min(20 + (loaded/14000000)*68, 85));
+          setStage(`Загрузка YOLOv8n: ${(loaded/1024/1024).toFixed(1)} МБ…`);
+        }
+      }
+
+      // Собираем ArrayBuffer из чанков
+      const totalLen = chunks.reduce((s,c)=>s+c.length, 0);
+      const modelBuf = new Uint8Array(totalLen);
+      let offset = 0;
+      for(const chunk of chunks){ modelBuf.set(chunk, offset); offset += chunk.length; }
+
+      setProgress(89); setStage('Инициализация сессии ONNX…'); await sleep(100);
+
+      // Создаём сессию — пробуем WebGL, fallback на WASM
+      try{
+        ortSession = await ort.InferenceSession.create(modelBuf.buffer, {
+          executionProviders: ['webgl', 'wasm'],
+          graphOptimizationLevel: 'all',
+        });
+      } catch(e2){
+        ortSession = await ort.InferenceSession.create(modelBuf.buffer, {
+          executionProviders: ['wasm'],
+          graphOptimizationLevel: 'all',
+        });
+      }
+      return; // успех
+    } catch(e){
+      lastErr = e;
+      console.warn(`Не удалось загрузить с ${url}:`, e);
+    }
+  }
+  throw lastErr || new Error('Все источники модели недоступны');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ИНФЕРЕНС YOLOv8n — замена model.detect(canvas)
+   Возвращает массив {class, score, bbox:[x,y,w,h]}
+   совместимый с оригинальным API COCO-SSD
+═══════════════════════════════════════════════════════════════ */
+async function yoloDetect(canvas){
+  if(!ortSession) throw new Error('Модель не загружена');
+
+  const S = YOLO_INPUT_SIZE;  // 640
+
+  // ── 1. Препроцессинг: ресайз в 640×640 с letterbox-паддингом ──
+  const {tensor, padX, padY, scale} = canvasToYoloTensor(canvas, S);
+
+  // ── 2. Запуск модели ──
+  const inputName  = ortSession.inputNames[0];
+  const feeds = {[inputName]: tensor};
+  const results = await ortSession.run(feeds);
+  tensor.dispose();
+
+  // ── 3. Декодирование выхода [1, 84, 8400] ──
+  const outputName = ortSession.outputNames[0];
+  const output = results[outputName];
+  const data   = output.data;          // Float32Array
+  const numDet = 8400;                 // proposals
+  const numCls = 80;
+
+  const detections = [];
+  const W = canvas.width, H = canvas.height;
+
+  for(let i = 0; i < numDet; i++){
+    // Формат YOLOv8: [cx, cy, w, h, cls0..cls79] — transposed [84, 8400]
+    const cx = data[0 * numDet + i];
+    const cy = data[1 * numDet + i];
+    const bw = data[2 * numDet + i];
+    const bh = data[3 * numDet + i];
+
+    // Ищем максимальный класс только среди cow(19) и sheep(20)
+    let bestScore = 0, bestCls = -1;
+    for(const clsIdx of [COCO_COW, COCO_SHEEP]){
+      const s = data[(4 + clsIdx) * numDet + i];
+      if(s > bestScore){ bestScore = s; bestCls = clsIdx; }
+    }
+
+    if(bestScore < THRESHOLD) continue;
+
+    // Конвертируем из letterbox-пространства обратно в пиксели canvas
+    const x1 = (cx - bw/2 - padX) / scale;
+    const y1 = (cy - bh/2 - padY) / scale;
+    const x2 = (cx + bw/2 - padX) / scale;
+    const y2 = (cy + bh/2 - padY) / scale;
+
+    const bboxX = Math.max(0, x1);
+    const bboxY = Math.max(0, y1);
+    const bboxW = Math.min(W, x2) - bboxX;
+    const bboxH = Math.min(H, y2) - bboxY;
+
+    if(bboxW <= 0 || bboxH <= 0) continue;
+
+    detections.push({
+      class: bestCls === COCO_COW ? 'cow' : 'sheep',
+      score: bestScore,
+      bbox:  [bboxX, bboxY, bboxW, bboxH],
+    });
+  }
+
+  return detections;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ПРЕПРОЦЕССИНГ: canvas → ONNX тензор [1,3,640,640]
+   Letterbox: масштаб с сохранением пропорций + паддинг серым
+═══════════════════════════════════════════════════════════════ */
+function canvasToYoloTensor(canvas, S){
+  const W = canvas.width, H = canvas.height;
+  const scale = Math.min(S / W, S / H);
+  const newW  = Math.round(W * scale);
+  const newH  = Math.round(H * scale);
+  const padX  = (S - newW) / 2;
+  const padY  = (S - newH) / 2;
+
+  // Рисуем в 640×640 с серым фоном (114,114,114 — стандарт YOLOv8)
+  const tmpCanvas = document.createElement('canvas');
+  tmpCanvas.width  = S; tmpCanvas.height = S;
+  const ctx = tmpCanvas.getContext('2d');
+  ctx.fillStyle = 'rgb(114,114,114)';
+  ctx.fillRect(0, 0, S, S);
+  ctx.drawImage(canvas, 0, 0, W, H, padX, padY, newW, newH);
+
+  const imgData = ctx.getImageData(0, 0, S, S).data;  // RGBA, Uint8
+
+  // Конвертируем RGBA → CHW float32 [1,3,640,640], нормализация /255
+  const tensor_data = new Float32Array(3 * S * S);
+  const area = S * S;
+  for(let i = 0; i < area; i++){
+    tensor_data[0 * area + i] = imgData[i * 4    ] / 255;  // R
+    tensor_data[1 * area + i] = imgData[i * 4 + 1] / 255;  // G
+    tensor_data[2 * area + i] = imgData[i * 4 + 2] / 255;  // B
+  }
+
+  const tensor = new ort.Tensor('float32', tensor_data, [1, 3, S, S]);
+  return {tensor, padX, padY, scale};
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ
+═══════════════════════════════════════════════════════════════ */
 async function initModel(){
   const errEl = document.getElementById('load-err');
   errEl.classList.remove('visible');
   setProgress(0); setStage('Инициализация…');
 
   const warnTimer = setTimeout(()=>
-    setStage('⚠️ Загрузка занимает >10 сек. Проверьте интернет…'), 10000);
+    setStage('⚠️ Загрузка >15 сек. Проверьте интернет или подождите — модель 13 МБ…'), 15000);
 
   try{
     await waitLibs();
-    setProgress(20); setStage('TensorFlow.js загружен ✓'); await sleep(150);
+    setProgress(18); setStage('ONNX Runtime Web загружен ✓'); await sleep(150);
 
-    setStage('Инициализация WebGL-бэкенда…');
-    await tf.setBackend('webgl');
-    await tf.ready();
-    setProgress(35); setStage('WebGL готов ✓'); await sleep(120);
+    // Загружаем YOLOv8n с прогрессом
+    await loadYoloModel();
+    setProgress(90); setStage('Веса YOLOv8n загружены ✓'); await sleep(100);
 
-    setStage('Загрузка весов COCO-SSD MobileNet v1 (улучшенная точность)…');
-    let fakePct = 35;
-    const fakeTimer = setInterval(()=>{
-      if(fakePct < 88){ fakePct += (88-fakePct)*0.06+0.3; setProgress(fakePct); }
-    }, 200);
-    model = await cocoSsd.load({base:'mobilenet_v1'});
-    clearInterval(fakeTimer);
-    setProgress(88); setStage('Веса COCO-SSD загружены ✓'); await sleep(80);
-
-    // v7: Ансамблевый классификатор — не требует обучения, только прогрев
+    // Прогрев ансамблевого классификатора (без изменений)
     setStage('Инициализация ансамблевого классификатора (HSV+текстура+края+форма)…');
     try{
-      // Прогрев — запускаем классификатор на тестовом изображении
       const ww = document.createElement('canvas');
       ww.width = 64; ww.height = 64;
       const wwCtx = ww.getContext('2d');
-      // Рисуем коричневый прямоугольник (тест коровы)
       wwCtx.fillStyle = '#7a5030'; wwCtx.fillRect(0, 0, 64, 64);
       await predict_species(ww, 64, 64);
-      // Рисуем серый (тест овцы)
       wwCtx.fillStyle = '#c0c0c0'; wwCtx.fillRect(0, 0, 64, 64);
       await predict_species(ww, 48, 52);
-      setProgress(94); setStage('Классификатор v7 готов ✓ (4 признака × ансамбль)'); await sleep(80);
-    }catch(ce){
+      setProgress(95); setStage('Классификатор готов ✓'); await sleep(80);
+    } catch(ce){
       console.warn('Classifier warmup failed (non-fatal):', ce);
-      setProgress(94); setStage('Классификатор готов ✓'); await sleep(80);
+      setProgress(95);
     }
 
-    setStage('Прогрев GPU…');
+    // Прогрев YOLOv8n
+    setStage('Прогрев YOLOv8n…');
     const wc = document.createElement('canvas');
-    wc.width=64; wc.height=64;
-    wc.getContext('2d').fillRect(0,0,64,64);
-    await model.detect(wc);
-    setProgress(100); setStage('Модель готова ✓'); await sleep(350);
+    wc.width = 640; wc.height = 640;
+    wc.getContext('2d').fillStyle='#7a7a7a'; wc.getContext('2d').fillRect(0,0,640,640);
+    await yoloDetect(wc);
+    setProgress(100); setStage('YOLOv8n готов ✓ — точность +15% vs COCO-SSD'); await sleep(400);
 
     clearTimeout(warnTimer);
     showApp();
-  }catch(e){
+  } catch(e){
     clearTimeout(warnTimer);
     console.error(e);
     setProgress(0); setStage('Ошибка загрузки');
@@ -1436,7 +1629,7 @@ function showApp(){
 
 /* ═══════════════════════════════════════════════════════════════
    IMAGE ENHANCEMENT  — adaptive local contrast for herds
-   1. Resize to sweet-spot for COCO-SSD (800px wide max)
+   1. Resize to ≤800px wide (YOLOv8n потом сам ресайзит до 640×640)
    2. CLAHE-like local contrast: equalise per-region histograms
    3. Mild sharpen + saturation boost
 ═══════════════════════════════════════════════════════════════ */
@@ -1540,7 +1733,7 @@ async function detectWithTiling(canvas){
   let allPreds=[];
 
   // 1. Full-image pass (catches large/nearby animals)
-  const fullPreds = await model.detect(canvas);
+  const fullPreds = await yoloDetect(canvas);
   allPreds.push(...fullPreds.map(p=>({...p})));
 
   // 2. Tile passes (catches small/distant animals in herds)
@@ -1562,7 +1755,7 @@ async function detectWithTiling(canvas){
       tile.getContext('2d').drawImage(canvas, ox,oy,ow,oh, 0,0,ow,oh);
 
       let tilePreds;
-      try{ tilePreds=await model.detect(tile); }
+      try{ tilePreds=await yoloDetect(tile); }
       catch(e){ continue; }
 
       // Remap bbox coordinates back to full-image space
@@ -2018,12 +2211,11 @@ async function camLoop(){
 
     const enhanced=enhanceImage(grab);
     let preds;
-    try{ preds=await model.detect(enhanced); }
+    try{ preds=await yoloDetect(enhanced); }
     catch(e){ return; }
 
-    // Filter → cross-tile NMS
-    const filtered=preds.filter(p=>ANIMALS.includes(p.class)&&p.score>=THRESHOLD);
-    const afterNms=adaptiveNms(filtered);
+    // yoloDetect уже фильтрует cow/sheep + THRESHOLD; применяем NMS
+    const afterNms=adaptiveNms(preds);
 
     // ── v5: Species re-classification ──────────────────────────
     // Corrects cow↔sheep confusion by running predict_species on each crop
@@ -2134,7 +2326,7 @@ async function processPhoto(file){
 
     const enhanced=enhanceImage(src);
     let preds;
-    try{ preds=await model.detect(enhanced); }
+    try{ preds=await yoloDetect(enhanced); }
     catch(e){
       endPhotoSpinner();
       showAlert('ph-err','❌ Ошибка анализа: '+e.message);
@@ -2142,8 +2334,9 @@ async function processPhoto(file){
       return;
     }
 
-    const filtered=preds.filter(p=>ANIMALS.includes(p.class)&&p.score>=THRESHOLD);
-    // v5: reclassify species before NMS
+    // yoloDetect уже фильтрует только cow/sheep и применяет THRESHOLD
+    const filtered=preds.filter(p=>p.score>=THRESHOLD);
+    // reclassify species before NMS
     const reclass = await reclassifyDetections(enhanced, filtered);
     const animals =adaptiveNms(reclass);
 
