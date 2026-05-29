@@ -871,7 +871,7 @@ footer{
 </div><!-- /panel-ph -->
 
 </main>
-<footer>Все вычисления локальны · Фото не передаются<br><span style="font-size:.65rem;opacity:.7">Версия 9.6 — обновление от 29 мая 2026 г. · 6-признаковый классификатор · Re-ID с памятью · 4×3 тайлинг</span></footer>
+<footer>Все вычисления локальны · Фото не передаются<br><span style="font-size:.65rem;opacity:.7">Версия 9.6 — обновление от 29 мая 2026 г. · 6-признаковый классификатор · Re-ID с памятью · 4×3 тайлинг · Soft-NMS · TTA · Пирамида масштабов</span></footer>
 </div><!-- /app -->
 
 <!-- ═══════════════════════════════════════════════════════════
@@ -1262,9 +1262,18 @@ async function buildClassifierHead(){ return null; }
  * reclassifyDetections(canvas, preds)
  * Runs predict_species on each bbox crop and patches preds in-place.
  * Replaces or confirms the COCO-SSD class label.
+ *
+ * v9.7: Добавлен фикс путаницы корова/овца:
+ * - Если COCO-SSD говорит "корова" с уверенностью ≥ 0.40,
+ *   а наш классификатор не уверен (разница cowP-sheepP < 0.15) —
+ *   перевешиваем в пользу коровы (модель видит характерные черты коровы)
+ * - Если bbox крупный (>2.5% площади) и COCO-SSD говорит "корова" — доверяем COCO
+ * - Очень маленький объект (< 0.3%) и низкая уверенность — скорее овца
  */
 async function reclassifyDetections(canvas, preds){
   const results = [];
+  const canvasArea = canvas.width * canvas.height;
+
   for(const p of preds){
     const [bx, by, bw, bh] = p.bbox;
     if(bw < 8 || bh < 8){ results.push(p); continue; }
@@ -1273,40 +1282,68 @@ async function reclassifyDetections(canvas, preds){
     crop.width  = Math.round(bw); crop.height = Math.round(bh);
     crop.getContext('2d').drawImage(canvas, bx, by, bw, bh, 0, 0, bw, bh);
 
-    // v7: передаём размеры bbox в классификатор (для признака форм-фактора)
+    // v9.7: передаём размеры bbox в классификатор (для признака форм-фактора)
     const hint = await predict_species(crop, bw, bh);
     if(hint){
-      // v7: больше доверяем своему классификатору, чем COCO-SSD
-      const merged = {...p, class: hint.class,
-                      score: p.score * 0.35 + hint.score * 0.65,
-                      classifierScore: hint.score};
-
-      const changed = hint.class !== p.class;
+      const relSize = (bw * bh) / canvasArea;
       const dbg = hint._dbg;
+      const cowP   = dbg ? dbg.cowP   : 0.5;
+      const sheepP = dbg ? dbg.sheepP : 0.5;
+      const gap    = Math.abs(cowP - sheepP); // уверенность нашего классификатора
+
+      let finalClass = hint.class;
+
+      // ── v9.7: Фикс путаницы корова/овца ──────────────────────
+      // Правило 1: COCO-SSD видит корову с высокой уверенностью (≥0.40) →
+      //   если наш классификатор не уверен (gap < 0.15) → доверяем COCO (корова)
+      if(p.class === 'cow' && p.score >= 0.40 && gap < 0.15){
+        finalClass = 'cow';
+        console.log(`%c[Species v9.7] Слабая уверенность классификатора (gap=${gap.toFixed(2)}), COCO говорит корова → корова`, 'color:#4af');
+      }
+
+      // Правило 2: Крупный объект (>2.5% кадра) + COCO говорит "корова" → корова
+      // (коровы физически намного крупнее овец)
+      if(p.class === 'cow' && p.score >= 0.30 && relSize > 0.025){
+        finalClass = 'cow';
+        console.log(`%c[Species v9.7] Крупный объект (${(relSize*100).toFixed(1)}%) + COCO=корова → корова`, 'color:#4af');
+      }
+
+      // Правило 3: Очень маленький объект (< 0.3%) → скорее овца
+      if(relSize < 0.003 && finalClass === 'cow' && hint.score < 0.60){
+        finalClass = 'sheep';
+        console.log(`%c[Species v9.7] Крошечный объект (${(relSize*100).toFixed(2)}%) → овца`, 'color:orange');
+        results.push({...p, class:'sheep', score: p.score * 0.85, classifierScore: hint.score});
+        continue;
+      }
+
+      // Правило 4: COCO говорит "овца", но наш классификатор уверен, что это корова
+      // (cowP > 0.65 и gap > 0.25) → доверяем классификатору
+      if(p.class === 'sheep' && cowP > 0.65 && gap > 0.25){
+        finalClass = 'cow';
+        console.log(`%c[Species v9.7] COCO=овца, но классификатор уверен корова (cowP=${(cowP*100).toFixed(0)}%) → корова`, 'color:orange');
+      }
+
+      const merged = {...p,
+        class: finalClass,
+        score: p.score * 0.35 + hint.score * 0.65,
+        classifierScore: hint.score
+      };
+
+      const changed = finalClass !== p.class;
       if(dbg){
         console.log(
-          `%c[Species v7] COCO=${p.class}(${(p.score*100).toFixed(0)}%) → ` +
-          `${hint.class}(cls:${(hint.score*100).toFixed(0)}%) ` +
-          `cow=${(dbg.cowP*100).toFixed(1)}% sheep=${(dbg.sheepP*100).toFixed(1)}% ` +
-          `HSV:${(dbg.hsv.cowScore).toFixed(2)}v${(dbg.hsv.sheepScore).toFixed(2)} ` +
-          `Tex:${dbg.tex.conf.toFixed(2)} Edge:${dbg.edg.conf.toFixed(2)} ` +
+          `%c[Species v9.7] COCO=${p.class}(${(p.score*100).toFixed(0)}%) → ` +
+          `${finalClass}(cls:${(hint.score*100).toFixed(0)}%) ` +
+          `cow=${(cowP*100).toFixed(1)}% sheep=${(sheepP*100).toFixed(1)}% ` +
+          `size=${(relSize*100).toFixed(2)}% ` +
           (changed ? '⚠️ RECLASSIFIED' : '✓'),
           changed ? 'color:orange;font-weight:bold' : 'color:#7ec87e'
         );
       }
 
-      // Постобработка: очень маленький объект с низкой уверенностью → скорее овца
-      if(merged.class === 'cow'){
-        const relSize = (bw * bh) / (canvas.width * canvas.height);
-        if(relSize < 0.004 && merged.score < 0.58){
-          console.log(`%c[Species v7] Tiny cow (${(relSize*100).toFixed(2)}%) → sheep`, 'color:orange');
-          results.push({...merged, class:'sheep', score: merged.score * 0.85});
-          continue;
-        }
-      }
       results.push(merged);
     } else {
-      console.log(`%c[Species v7] ${p.class}(${(p.score*100).toFixed(0)}%) — keeping original`, 'color:#888');
+      console.log(`%c[Species v9.7] ${p.class}(${(p.score*100).toFixed(0)}%) — keeping original`, 'color:#888');
       results.push(p);
     }
   }
@@ -1957,6 +1994,195 @@ async function detectWithTiling(canvas){
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   v9.7: ПИРАМИДА МАСШТАБОВ (Multi-scale detection)
+   Прогоняем детекцию на 5 масштабах: 0.5×, 0.75×, 1×, 1.5×, 2×
+   Животные вдали (на горизонте) детектируются при 2× zoom,
+   крупные близкие — при 0.5×.
+   После всех масштабов → объединяем через crossTileNms (глобальный NMS).
+═══════════════════════════════════════════════════════════════ */
+const MULTISCALE_FACTORS = [0.5, 0.75, 1.0, 1.5, 2.0];
+// Ограничиваем размер канваса — слишком большой замедлит браузер
+const MULTISCALE_MAX_DIM = 1200;
+
+/**
+ * Ресайзит canvas с сохранением пропорций.
+ * @param {HTMLCanvasElement} src
+ * @param {number} scale — коэффициент масштабирования
+ * @returns {HTMLCanvasElement}
+ */
+function scaleCanvas(src, scale){
+  let W = Math.round(src.width  * scale);
+  let H = Math.round(src.height * scale);
+  // Ограничиваем максимальный размер, чтобы не подвесить браузер
+  const maxDim = Math.max(W, H);
+  if(maxDim > MULTISCALE_MAX_DIM){
+    const limScale = MULTISCALE_MAX_DIM / maxDim;
+    W = Math.round(W * limScale);
+    H = Math.round(H * limScale);
+  }
+  W = Math.max(1, W); H = Math.max(1, H);
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  c.getContext('2d').drawImage(src, 0, 0, W, H);
+  return c;
+}
+
+/**
+ * detectMultiScale(canvas) — детекция на пирамиде масштабов
+ * Возвращает все bbox в координатах оригинального canvas.
+ * Масштабы обрабатываются последовательно, чтобы не перегрузить GPU.
+ * Масштаб 1.0 пропускается — его покрывает основной detectWithTiling.
+ */
+async function detectMultiScale(canvas){
+  const W = canvas.width, H = canvas.height;
+  let allPreds = [];
+
+  for(const factor of MULTISCALE_FACTORS){
+    if(factor === 1.0) continue; // масштаб 1× уже есть в detectWithTiling
+
+    const scaled = scaleCanvas(canvas, factor);
+    let preds;
+    try{
+      preds = await yoloDetect(scaled);
+    } catch(e){ continue; }
+
+    // Ремап координат bbox в пространство оригинального canvas
+    const invFactor = 1 / factor;
+    // Учитываем реальный коэффициент масштаба (с учётом ограничения MULTISCALE_MAX_DIM)
+    const realScaleX = W / scaled.width;
+    const realScaleY = H / scaled.height;
+
+    preds.forEach(p=>{
+      const [bx,by,bw,bh] = p.bbox;
+      allPreds.push({
+        ...p,
+        bbox:[
+          bx * realScaleX,
+          by * realScaleY,
+          bw * realScaleX,
+          bh * realScaleY
+        ],
+        _scale: factor // для отладки
+      });
+    });
+  }
+
+  return allPreds;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   v9.7: TTA (Test-Time Augmentation)
+   Прогоняем каждый кадр 3 раза:
+     1. Оригинал
+     2. Горизонтальный flip (зеркало)
+     3. Поворот на +5°
+   Результаты bbox и confidence усредняются после NMS.
+   Это повышает стабильность детекции — особенно для мелких животных.
+═══════════════════════════════════════════════════════════════ */
+
+/**
+ * Горизонтальный flip canvas — возвращает новый canvas
+ */
+function flipHorizontal(src){
+  const c = document.createElement('canvas');
+  c.width = src.width; c.height = src.height;
+  const ctx = c.getContext('2d');
+  ctx.translate(src.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(src, 0, 0);
+  return c;
+}
+
+/**
+ * Поворот canvas на angle градусов — возвращает новый canvas того же размера
+ */
+function rotateCanvas(src, angleDeg){
+  const W = src.width, H = src.height;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  ctx.translate(W/2, H/2);
+  ctx.rotate(angleDeg * Math.PI / 180);
+  ctx.drawImage(src, -W/2, -H/2);
+  return c;
+}
+
+/**
+ * Инвертирует bbox после горизонтального flip обратно в пространство оригинала
+ */
+function flipBboxH(bbox, canvasW){
+  const [x, y, w, h] = bbox;
+  return [canvasW - x - w, y, w, h];
+}
+
+/**
+ * Инвертирует bbox после поворота на -angleDeg (т.е. поворачивает bbox обратно)
+ * Упрощённо: вращаем центр bbox, bbox остаётся axis-aligned (приближение)
+ */
+function rotateBboxBack(bbox, canvasW, canvasH, angleDeg){
+  const [x, y, w, h] = bbox;
+  const cx = x + w/2 - canvasW/2;
+  const cy = y + h/2 - canvasH/2;
+  const rad = -angleDeg * Math.PI / 180; // обратный поворот
+  const rcx = cx * Math.cos(rad) - cy * Math.sin(rad);
+  const rcy = cx * Math.sin(rad) + cy * Math.cos(rad);
+  return [
+    Math.max(0, rcx + canvasW/2 - w/2),
+    Math.max(0, rcy + canvasH/2 - h/2),
+    w, h
+  ];
+}
+
+/**
+ * detectWithTTA(canvas) — три аугментации + объединение через NMS
+ * Возвращает bbox в координатах оригинального canvas.
+ * Если хотя бы одна аугментация упала — используем только успешные.
+ */
+async function detectWithTTA(canvas){
+  const W = canvas.width, H = canvas.height;
+  let allPreds = [];
+
+  // ─── Аугментация 1: оригинал (включая тайлинг и пирамиду) ───
+  try{
+    const preds1 = await detectWithTiling(canvas);
+    allPreds.push(...preds1);
+  } catch(e){ console.warn('[TTA] оригинал упал:', e); }
+
+  // ─── Аугментация 2: горизонтальный flip ──────────────────────
+  try{
+    const flipped = flipHorizontal(canvas);
+    const preds2raw = await yoloDetect(flipped);
+    // Ремап bbox обратно в пространство оригинала
+    const preds2 = preds2raw.map(p=>({
+      ...p,
+      bbox: flipBboxH(p.bbox, W),
+      _tta: 'flip'
+    }));
+    allPreds.push(...preds2);
+  } catch(e){ console.warn('[TTA] flip упал:', e); }
+
+  // ─── Аугментация 3: поворот на +5° ───────────────────────────
+  try{
+    const rotated = rotateCanvas(canvas, 5);
+    const preds3raw = await yoloDetect(rotated);
+    const preds3 = preds3raw.map(p=>({
+      ...p,
+      bbox: rotateBboxBack(p.bbox, W, H, 5),
+      _tta: 'rot5'
+    }));
+    allPreds.push(...preds3);
+  } catch(e){ console.warn('[TTA] rotate упал:', e); }
+
+  // ─── Добавляем детекции с пирамиды масштабов ─────────────────
+  try{
+    const multiScalePreds = await detectMultiScale(canvas);
+    allPreds.push(...multiScalePreds);
+  } catch(e){ console.warn('[TTA] multi-scale упал:', e); }
+
+  return allPreds;
+}
+
+/* ═══════════════════════════════════════════════════════════════
    CROSS-TILE NMS  — merges duplicate detections from tiling
    Uses same logic as adaptiveNms but across all tile results
 ═══════════════════════════════════════════════════════════════ */
@@ -1999,47 +2225,47 @@ function bboxIou(a,b){
 function centerOf(bbox){ return [bbox[0]+bbox[2]/2, bbox[1]+bbox[3]/2]; }
 
 /* ═══════════════════════════════════════════════════════════════
-   ADAPTIVE NMS  — preserves small objects (calves behind cows)
+   SOFT-NMS  — v9.7: вместо жёсткого подавления понижаем confidence
+   Это позволяет двум животным вплотную не сливаться в одно.
    Rules:
-   1. Same class + IoU > IOU_NMS  → suppress lower-score
-   2. Different classes + IoU > 0  → KEEP BOTH (cow + calf scenario)
-   3. Same class + IoU > IOU_SMALL, smaller box area < SMALL_RATIO → KEEP BOTH
+   1. Different classes → KEEP BOTH всегда (корова рядом с овцой)
+   2. Same class + маленький объект (< SMALL_RATIO площади) → KEEP BOTH
+   3. Same class + высокий IoU → Soft-NMS: score j *= (1 - iou)
+   4. После снижения score — фильтруем ниже THRESHOLD
 ═══════════════════════════════════════════════════════════════ */
 function adaptiveNms(preds){
-  const sorted=[...preds].sort((a,b)=>b.score-a.score);
-  const suppressed=new Set();
+  // Soft-NMS: работаем с копией объектов, чтобы не мутировать оригинал
+  const sorted=[...preds].map(p=>({...p})).sort((a,b)=>b.score-a.score);
 
   for(let i=0;i<sorted.length;i++){
-    if(suppressed.has(i)) continue;
+    if(sorted[i].score < THRESHOLD) continue; // уже подавлен ранее
     for(let j=i+1;j<sorted.length;j++){
-      if(suppressed.has(j)) continue;
+      if(sorted[j].score < THRESHOLD) continue;
+
       const iou=bboxIou(sorted[i].bbox, sorted[j].bbox);
       if(iou===0) continue;
 
-      if(sorted[i].class !== sorted[j].class){
-        // Different classes: ALWAYS keep both (cow + calf/sheep nearby)
-        continue;
-      }
+      // Разные классы → всегда оставляем оба (корова + овца рядом)
+      if(sorted[i].class !== sorted[j].class) continue;
 
-      // Same class
+      // Одинаковый класс — проверяем соотношение размеров
       const areaI=bboxArea(sorted[i].bbox);
       const areaJ=bboxArea(sorted[j].bbox);
       const smallerArea=Math.min(areaI,areaJ);
       const largerArea =Math.max(areaI,areaJ);
       const sizeRatio  =smallerArea/largerArea;
 
-      if(iou > IOU_NMS){
-        // High overlap, similar size → true duplicate → suppress j
-        if(sizeRatio >= SMALL_RATIO){
-          suppressed.add(j);
-        }
-        // Small box hidden behind large one (e.g. calf) → keep both
-        // (sizeRatio < SMALL_RATIO → fall through, j is kept)
-      }
-      // Low-medium overlap → keep both regardless
+      // Маленький объект (телёнок за коровой) → оставляем оба
+      if(sizeRatio < SMALL_RATIO) continue;
+
+      // Soft-NMS: понижаем score вместо удаления
+      // При IoU=1.0 → score обнуляется; при IoU=0.5 → score * 0.5
+      sorted[j].score *= (1 - iou);
     }
   }
-  return sorted.filter((_,i)=>!suppressed.has(i));
+
+  // Фильтруем объекты с опустившимся score ниже порога и сортируем заново
+  return sorted.filter(p=>p.score >= THRESHOLD).sort((a,b)=>b.score-a.score);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -2396,8 +2622,8 @@ async function camLoop(){
     const enhanced=enhanceImage(grab);
     let preds;
     try{
-      // v10: Используем тайлинг для обнаружения стад и мелких/дальних животных
-      const allPreds = await detectWithTiling(enhanced);
+      // v9.7: TTA + пирамида масштабов + тайлинг — всё в одном вызове
+      const allPreds = await detectWithTTA(enhanced);
       preds = crossTileNms(allPreds);
     }
     catch(e){ return; }
@@ -2513,7 +2739,11 @@ async function processPhoto(file){
 
     const enhanced=enhanceImage(src);
     let preds;
-    try{ preds=await yoloDetect(enhanced); }
+    try{
+      // v9.7: TTA + пирамида масштабов для фото
+      const allPreds = await detectWithTTA(enhanced);
+      preds = crossTileNms(allPreds);
+    }
     catch(e){
       endPhotoSpinner();
       showAlert('ph-err','❌ Ошибка анализа: '+e.message);
@@ -2521,7 +2751,7 @@ async function processPhoto(file){
       return;
     }
 
-    // yoloDetect уже фильтрует только cow/sheep и применяет THRESHOLD
+    // preds уже прошёл crossTileNms; применяем финальный adaptiveNms (Soft-NMS)
     const filtered=preds.filter(p=>p.score>=THRESHOLD);
     // reclassify species before NMS
     const reclass = await reclassifyDetections(enhanced, filtered);
