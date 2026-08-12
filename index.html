@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
-<title>AI Счётчик животных — Ферма v9.6</title>
+<title>AI Счётчик животных — Ферма 0.1 beta</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700;900&family=Roboto:wght@400;500&display=swap" rel="stylesheet"/>
 
@@ -616,7 +616,7 @@ footer{
     background:rgba(94,203,62,.1);border:1px solid rgba(94,203,62,.3);
     border-radius:20px;padding:4px 14px;margin-bottom:16px;
     opacity:1;transition:opacity 1s;
-  ">⚡ Исправлено: корова и овца теперь не путаются · v9.6</div>
+  ">⚡ Исправлено: корова и овца теперь не путаются · 0.1 beta</div>
   <div class="progress-outer"><div class="progress-inner" id="prog-bar"></div></div>
   <div id="load-pct">0%</div>
   <div id="load-stage">Инициализация…</div>
@@ -816,7 +816,7 @@ footer{
 </div><!-- /panel-ph -->
 
 </main>
-<footer>Все вычисления локальны · Фото не покидают устройство<br><span style="font-size:.65rem;opacity:.7">⚡ Версия 9.6 — обновление от 06 июня 2026 г.</span></footer>
+<footer>Все вычисления локальны · Фото не покидают устройство<br><span style="font-size:.65rem;opacity:.7">⚡ Версия 0.1 beta</span></footer>
 </div><!-- /app -->
 
 <!-- ═══════════════════════════════════════════════════════════
@@ -874,23 +874,15 @@ footer{
 <!-- ═══════════════════════════════════════════════════════════
      SCRIPTS
 ═══════════════════════════════════════════════════════════════ -->
-<!-- TensorFlow.js + COCO-SSD — гарантированная загрузка, CORS открыт -->
-<script>window._tfReady=false; window._cocoReady=false;</script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"
-        onload="window._tfReady=true" onerror="loadTfFallback()"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"
-        onload="window._cocoReady=true" onerror="loadCocoFallback()"></script>
+<!-- ONNX Runtime Web — для YOLOv8n -->
+<script>window._ortReady=false;</script>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.min.js"
+        onload="window._ortReady=true" onerror="loadOrtFallback()"></script>
 <script>
-function loadTfFallback(){
+function loadOrtFallback(){
   var s=document.createElement('script');
-  s.src='https://unpkg.com/@tensorflow/tfjs@4.20.0/dist/tf.min.js';
-  s.onload=function(){window._tfReady=true};
-  document.head.appendChild(s);
-}
-function loadCocoFallback(){
-  var s=document.createElement('script');
-  s.src='https://unpkg.com/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js';
-  s.onload=function(){window._cocoReady=true};
+  s.src='https://unpkg.com/onnxruntime-web@1.21.0/dist/ort.min.js';
+  s.onload=function(){window._ortReady=true};
   document.head.appendChild(s);
 }
 </script>
@@ -903,7 +895,7 @@ const ANIMALS     = ['cow','sheep'];
 const LABELS      = {cow:'Корова', sheep:'Овца'};
 const BOX_CLR     = {cow:'#cc4422', sheep:'#4aa8cc'};
 
-const THRESHOLD   = 0.28;
+const THRESHOLD   = 0.18;  // снижено 0.28→0.18 для обнаружения далёких коров в стаде
 const IOU_NMS     = 0.45;
 const IOU_SMALL   = 0.25;
 const SMALL_RATIO = 0.25;
@@ -913,9 +905,9 @@ const CONFIRM_SEC = 3;
 const CIRC        = 87.96;
 
 // Tiling
-const TILE_COLS   = 3;
-const TILE_ROWS   = 2;
-const TILE_OVERLAP= 0.20;
+const TILE_COLS   = 4;    // увеличено 3→4 для более детального покрытия стада
+const TILE_ROWS   = 3;    // увеличено 2→3 итого 12 тайлов вместо 6
+const TILE_OVERLAP= 0.30; // увеличено 20%→30% чтобы не терять коров на стыках
 const CROSS_NMS   = 0.40;
 
 // ── v5: ByteTrack parameters ──────────────────────────────────
@@ -1443,7 +1435,7 @@ function resetReId(){
 const YOLO_INPUT_SIZE = 640;
 // COCO class indices нужных нам животных
 const COCO_COW   = 19;  // "cow"
-const COCO_SHEEP = 20;  // "sheep"
+const COCO_SHEEP = 18;  // "sheep"
 // Имена 80 COCO классов (индекс = позиция)
 const COCO80 = ["person","bicycle","car","motorcycle","airplane","bus","train","truck","boat",
   "traffic light","fire hydrant","stop sign","parking meter","bench","bird","cat","dog","horse",
@@ -1455,30 +1447,24 @@ const COCO80 = ["person","bicycle","car","motorcycle","airplane","bus","train","
   "remote","keyboard","cell phone","microwave","oven","toaster","sink","refrigerator","book",
   "clock","vase","scissors","teddy bear","hair drier","toothbrush"];
 
-// TF.js COCO-SSD — загружается автоматически через официальный CDN
-// Никакого ручного fetch() — модель грузит сам tfjs через свой API
-// COCO классы коров и овец:
-// 'cow' → cow, 'sheep' → sheep (оба есть в COCO-SSD)
-let cocoModel = null;  // TF.js COCO-SSD модель
+// YOLOv8n ONNX — загружается через ONNX Runtime Web
+// Модель грузится из CDN через ort.InferenceSession.create()
+// COCO классы коров и овец: 19=cow, 18=sheep, 17=horse→cow
+let cocoModel = null;  // ONNX InferenceSession (YOLOv8n)
 
 /* ═══════════════════════════════════════════════════════════════
-   ОЖИДАНИЕ ЗАГРУЗКИ TF.js + COCO-SSD
+   ОЖИДАНИЕ ЗАГРУЗКИ ONNX Runtime Web
 ═══════════════════════════════════════════════════════════════ */
 async function waitLibs(){
   setStage('Загрузка AI-библиотек…');
   for(let i=0; i<100; i++){
-    if(window._tfReady && typeof tf !== 'undefined') break;
+    if(window._ortReady && typeof ort !== 'undefined') break;
     await sleep(200);
-    setProgress(Math.min(i*0.1, 8));
-    if(i === 99) throw new Error('Ошибка загрузки. Проверьте интернет и обновите страницу.');
+    setProgress(Math.min(i*0.15, 12));
+    if(i === 99) throw new Error('Ошибка загрузки ONNX Runtime. Проверьте интернет и обновите страницу.');
   }
-  setStage('Подготовка модели распознавания…');
-  for(let i=0; i<100; i++){
-    if(window._cocoReady && typeof cocoSsd !== 'undefined') return;
-    await sleep(200);
-    setProgress(Math.min(8 + i*0.1, 15));
-    if(i === 99) throw new Error('Ошибка загрузки модели. Проверьте интернет и обновите страницу.');
-  }
+  // Configure WASM paths
+  ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/';
 }
 
 
@@ -1489,118 +1475,172 @@ const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
               || (navigator.maxTouchPoints > 1 && window.innerWidth < 768);
 
 /* ═══════════════════════════════════════════════════════════════
-   ЗАГРУЗКА COCO-SSD МОДЕЛИ — с антизависанием для мобильных
-   - На мобильных: lite-версия (lite_mobilenet_v2, меньше памяти)
-   - Таймаут-watchdog: если 5 секунд нет прогресса → fallback
-   - Реальные этапы прогресса: не симулируем 86%, а двигаемся вперёд
+   ЗАГРУЗКА YOLOv8n ONNX МОДЕЛИ
+   - Модель: yolov8n.onnx (~13 МБ, COCO 80 классов, mAP 37.3%)
+   - Несколько fallback URL через jsDelivr CDN
+   - Таймаут: 90с десктоп / 120с мобильные
 ═══════════════════════════════════════════════════════════════ */
 async function loadYoloModel(){
-  const modelBase = isMobile ? 'lite_mobilenet_v2' : 'mobilenet_v2';
-  const modelLabel = isMobile ? 'облегчённая (для телефона)' : 'стандартная';
-
-  setStage(`⬇️ Загрузка AI-модели ${modelLabel}…`);
+  setStage('⬇️ Загрузка YOLOv8n AI-модели…');
   setProgress(20);
 
-  // Watchdog: если прогресс застрял дольше 10 сек → кидаем ошибку с кнопкой retry
-  let lastProgress = 20;
-  let lastProgressTime = Date.now();
-  const watchdog = setInterval(()=>{
-    const cur = parseFloat(document.getElementById('prog-bar').style.width || '0');
-    if(cur > lastProgress){
-      lastProgress = cur;
-      lastProgressTime = Date.now();
-    } else if(Date.now() - lastProgressTime > 10000){
-      clearInterval(watchdog);
-      // Не бросаем ошибку здесь — она поймается снаружи через Promise.race
-    }
-  }, 1000);
+  const MODEL_URLS = [
+    'https://cdn.jsdelivr.net/gh/nickmuchi/yolov8-onnx-models@main/yolov8n.onnx',
+    'https://cdn.jsdelivr.net/gh/nickmuchi/yolov8-onnx-models/yolov8n.onnx',
+    'https://cdn.jsdelivr.net/gh/nickmuchi/yolov8-onnx-models@master/yolov8n.onnx'
+  ];
 
-  // Этап 1: инициализация TF backend (может долго инициализироваться на мобильных)
-  setStage('⚙️ Подготовка AI-ядра…');
-  setProgress(25);
-  await sleep(isMobile ? 300 : 100);
-
-  // Этап 2: фактическая загрузка модели с таймаутом
-  const LOAD_TIMEOUT = isMobile ? 90000 : 60000; // 90 сек для мобильных
-  let fakeProgress = 30;
+  const LOAD_TIMEOUT = isMobile ? 120000 : 90000;
+  let fakeProgress = 25;
   const progTimer = setInterval(()=>{
-    // Движемся медленнее на последних процентах, чтобы не зависнуть на 86%
-    const speed = fakeProgress < 60 ? 2.5 : fakeProgress < 80 ? 1.0 : 0.3;
+    const speed = fakeProgress < 50 ? 2.0 : fakeProgress < 75 ? 0.8 : 0.2;
     fakeProgress = Math.min(fakeProgress + speed, 84);
     setProgress(fakeProgress);
     const pct = Math.round(fakeProgress);
-    if(pct < 60)      setStage('⬇️ Скачиваем AI-модель…');
-    else if(pct < 75) setStage('⬇️ Загружаем веса модели…');
-    else              setStage('⬇️ Почти готово, оптимизируем…');
+    if(pct < 50)      setStage('⬇️ Скачиваем YOLOv8n модель (~13 МБ)…');
+    else if(pct < 70) setStage('⬇️ Загружаем веса модели…');
+    else              setStage('⬇️ Инициализируем AI-ядро…');
   }, isMobile ? 600 : 400);
 
-  const loadPromise = cocoSsd.load({ base: modelBase });
-  const timeoutPromise = new Promise((_,rej)=>
-    setTimeout(()=>rej(new Error(`Превышено время ожидания (${LOAD_TIMEOUT/1000}с). Проверьте интернет или подключитесь к Wi-Fi.`)), LOAD_TIMEOUT)
-  );
-
-  try {
-    cocoModel = await Promise.race([loadPromise, timeoutPromise]);
-    clearInterval(progTimer);
-    clearInterval(watchdog);
-    setProgress(88);
-    setStage('✓ AI-модель загружена');
-  } catch(e) {
-    clearInterval(progTimer);
-    clearInterval(watchdog);
-    // Если мобильный и стандартная модель упала — пробуем lite
-    if(!isMobile && e.message && !e.message.includes('Превышено')){
-      setStage('⚠️ Переключаемся на облегчённую модель…');
-      setProgress(30);
-      try {
-        cocoModel = await Promise.race([
-          cocoSsd.load({ base: 'lite_mobilenet_v2' }),
-          new Promise((_,rej)=>setTimeout(()=>rej(new Error('Таймаут fallback')),60000))
-        ]);
-        setProgress(88);
-        setStage('✓ Облегчённая модель загружена');
-      } catch(e2){
-        throw new Error('Не удалось загрузить модель: ' + e2.message);
-      }
-    } else {
-      throw new Error('Не удалось загрузить модель: ' + e.message);
+  let lastError = null;
+  for(const url of MODEL_URLS){
+    try {
+      const loadPromise = ort.InferenceSession.create(url, {
+        executionProviders: ['wasm'],
+        graphOptimizationLevel: 'all'
+      });
+      const timeoutPromise = new Promise((_,rej)=>
+        setTimeout(()=>rej(new Error(`Превышено время ожидания (${LOAD_TIMEOUT/1000}с).`)), LOAD_TIMEOUT)
+      );
+      cocoModel = await Promise.race([loadPromise, timeoutPromise]);
+      clearInterval(progTimer);
+      setProgress(88);
+      setStage('✓ YOLOv8n модель загружена');
+      return;
+    } catch(e) {
+      lastError = e;
+      continue;
     }
   }
+  clearInterval(progTimer);
+  throw new Error('Не удалось загрузить YOLOv8n: ' + (lastError?.message || 'неизвестная ошибка'));
 }
+
 async function yoloDetect(canvas){
   if(!cocoModel) throw new Error('Модель не загружена');
 
-  // COCO-SSD принимает HTMLCanvasElement напрямую
-  const predictions = await cocoModel.detect(canvas, 20, THRESHOLD);
-
   const W = canvas.width, H = canvas.height;
+  const inputSize = YOLO_INPUT_SIZE; // 640
+
+  // ── Preprocessing: resize to 640×640, normalize [0,1], NCHW format ──
+  const resized = document.createElement('canvas');
+  resized.width = inputSize; resized.height = inputSize;
+  const rctx = resized.getContext('2d');
+
+  // Letterbox: maintain aspect ratio with padding
+  const scale = Math.min(inputSize / W, inputSize / H);
+  const newW = Math.round(W * scale);
+  const newH = Math.round(H * scale);
+  const padX = (inputSize - newW) / 2;
+  const padY = (inputSize - newH) / 2;
+
+  rctx.fillStyle = '#808080'; // gray padding
+  rctx.fillRect(0, 0, inputSize, inputSize);
+  rctx.drawImage(canvas, padX, padY, newW, newH);
+
+  const imgData = rctx.getImageData(0, 0, inputSize, inputSize).data;
+  const float32 = new Float32Array(3 * inputSize * inputSize);
+  const pixelCount = inputSize * inputSize;
+
+  // RGBA → RGB, normalize [0,1], NCHW layout: [1, 3, 640, 640]
+  for(let i = 0; i < pixelCount; i++){
+    float32[i]                  = imgData[i * 4]     / 255.0; // R
+    float32[pixelCount + i]     = imgData[i * 4 + 1] / 255.0; // G
+    float32[2 * pixelCount + i] = imgData[i * 4 + 2] / 255.0; // B
+  }
+
+  const inputTensor = new ort.Tensor('float32', float32, [1, 3, inputSize, inputSize]);
+
+  // ── Run inference ──
+  const feeds = {};
+  const inputName = cocoModel.inputNames[0];
+  feeds[inputName] = inputTensor;
+  const results = await cocoModel.run(feeds);
+  const output = results[cocoModel.outputNames[0]];
+
+  // ── Post-processing ──
+  // YOLOv8 output: [1, 84, 8400] → transpose to [8400, 84]
+  // 84 = 4 (cx, cy, w, h) + 80 class scores
+  const data = output.data;
+  const numPreds = output.dims[2];  // 8400
+  const numClasses = output.dims[1] - 4;  // 80
+
   const detections = [];
+  // Indices for animals we care about (COCO 80-class):
+  // 17=horse, 18=sheep, 19=cow
+  const ANIMAL_INDICES = [
+    {idx: 19, cls: 'cow'},
+    {idx: 18, cls: 'sheep'},
+    {idx: 17, cls: 'cow'}  // horse → cow
+  ];
 
-  for(const p of predictions){
-    const cls = p.class.toLowerCase();
-    // Фильтруем только коров и овец
-    let animalClass = null;
-    if(cls === 'cow')   animalClass = 'cow';
-    if(cls === 'sheep') animalClass = 'sheep';
-    // horse → cow (похожий силуэт, полезно для смешанных стад)
-    // if(cls === 'horse') animalClass = 'cow';
-    if(!animalClass) continue;
+  for(let i = 0; i < numPreds; i++){
+    // Data is stored column-major: data[row * numPreds + i]
+    const cx = data[0 * numPreds + i];
+    const cy = data[1 * numPreds + i];
+    const bw = data[2 * numPreds + i];
+    const bh = data[3 * numPreds + i];
 
-    const [bx, by, bw, bh] = p.bbox;
-    const bboxX = Math.max(0, bx);
-    const bboxY = Math.max(0, by);
-    const bboxW = Math.min(W - bboxX, bw);
-    const bboxH = Math.min(H - bboxY, bh);
+    // Find best animal class score
+    let bestScore = 0, bestCls = null;
+    for(const {idx, cls} of ANIMAL_INDICES){
+      const score = data[(4 + idx) * numPreds + i];
+      if(score > bestScore){ bestScore = score; bestCls = cls; }
+    }
+
+    if(bestScore < THRESHOLD || !bestCls) continue;
+
+    // Convert from letterboxed coords back to original image coords
+    const x1 = (cx - bw / 2 - padX) / scale;
+    const y1 = (cy - bh / 2 - padY) / scale;
+    const dw = bw / scale;
+    const dh = bh / scale;
+
+    // Clip to image bounds
+    const bboxX = Math.max(0, x1);
+    const bboxY = Math.max(0, y1);
+    const bboxW = Math.min(W - bboxX, dw);
+    const bboxH = Math.min(H - bboxY, dh);
     if(bboxW <= 0 || bboxH <= 0) continue;
 
     detections.push({
-      class: animalClass,
-      score: p.score,
-      bbox:  [bboxX, bboxY, bboxW, bboxH],
+      class: bestCls,
+      score: bestScore,
+      bbox: [bboxX, bboxY, bboxW, bboxH]
     });
   }
 
-  return detections;
+  // Apply NMS within this batch
+  return nmsYolo(detections, 0.45);
+}
+
+// Simple greedy NMS for YOLOv8 raw detections
+function nmsYolo(dets, iouThresh){
+  const sorted = [...dets].sort((a,b) => b.score - a.score);
+  const keep = [];
+  const suppressed = new Set();
+  for(let i = 0; i < sorted.length; i++){
+    if(suppressed.has(i)) continue;
+    keep.push(sorted[i]);
+    for(let j = i + 1; j < sorted.length; j++){
+      if(suppressed.has(j)) continue;
+      if(sorted[i].class !== sorted[j].class) continue;
+      if(bboxIou(sorted[i].bbox, sorted[j].bbox) > iouThresh){
+        suppressed.add(j);
+      }
+    }
+  }
+  return keep;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1694,8 +1734,8 @@ function showApp(){
    3. Mild sharpen + saturation boost
 ═══════════════════════════════════════════════════════════════ */
 function enhanceImage(srcCanvas){
-  // Step 1: scale to ≤800px wide (COCO-SSD works best here)
-  const maxW=800;
+  // Step 1: scale to ≤1280px wide — крупнее пиксели каждой коровы → лучше распознавание
+  const maxW=1280;
   let W=srcCanvas.width, H=srcCanvas.height;
   if(W>maxW){ H=Math.round(H*maxW/W); W=maxW; }
 
@@ -2258,7 +2298,7 @@ async function camLoop(){
 
     if(overlay.width!==video.videoWidth && video.videoWidth) syncOverlay();
     if(ts-lastDetectTs<DETECT_MS) return;
-    if(!model||video.readyState<2) return;
+    if(!cocoModel||video.readyState<2) return; // BUGFIX: было model (не существует), исправлено на cocoModel
     lastDetectTs=ts;
     totalFrames++;
     // (debug counters removed from UI — data still tracked internally)
@@ -2271,11 +2311,11 @@ async function camLoop(){
 
     const enhanced=enhanceImage(grab);
     let preds;
-    try{ preds=await yoloDetect(enhanced); }
+    try{ preds=await detectWithTiling(enhanced); }
     catch(e){ return; }
 
-    // yoloDetect уже фильтрует cow/sheep + THRESHOLD; применяем NMS
-    const afterNms=adaptiveNms(preds);
+    // Используем crossTileNms для объединения результатов с разных тайлов
+    const afterNms=crossTileNms(preds);
 
     // ── v5: Species re-classification ──────────────────────────
     // Corrects cow↔sheep confusion by running predict_species on each crop
@@ -2385,7 +2425,7 @@ async function processPhoto(file){
 
     const enhanced=enhanceImage(src);
     let preds;
-    try{ preds=await yoloDetect(enhanced); }
+    try{ preds=await detectWithTiling(enhanced); }
     catch(e){
       endPhotoSpinner();
       showAlert('ph-err','❌ Ошибка анализа: '+e.message);
@@ -2397,7 +2437,7 @@ async function processPhoto(file){
     const filtered=preds.filter(p=>p.score>=THRESHOLD);
     // reclassify species before NMS
     const reclass = await reclassifyDetections(enhanced, filtered);
-    const animals =adaptiveNms(reclass);
+    const animals =crossTileNms(reclass);
 
     const counts={cow:0,sheep:0};
     animals.forEach(p=>counts[p.class]++);
@@ -2518,7 +2558,7 @@ function checkNetworkStatus(){
   } else {
     el.innerHTML = isMobile
       ? '🟢 Сеть доступна — загружаем облегчённую модель для телефона'
-      : '🟢 Сеть доступна — загружаем AI (~13 МБ)';
+      : '🟢 Сеть доступна — загружаем YOLOv8n AI (~13 МБ)';
     el.style.color = 'var(--muted)';
     setTimeout(()=>{ if(el) el.innerHTML=''; }, 3000);
   }
